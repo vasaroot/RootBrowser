@@ -132,11 +132,17 @@ pub async fn workspace_delete(
             .await
             .map_err(AppError::db)?;
 
-        sqlx::query("DELETE FROM proxies WHERE workspace_id = ?")
-            .bind(&id)
-            .execute(&state.db)
-            .await
-            .map_err(AppError::db)?;
+        // Delete proxies tagged with this workspace
+        let ws_tag = format!("workspace:{}", id);
+        sqlx::query(
+            "DELETE FROM proxies WHERE EXISTS (
+                SELECT 1 FROM json_each(tags) WHERE value = ?
+            )",
+        )
+        .bind(&ws_tag)
+        .execute(&state.db)
+        .await
+        .map_err(AppError::db)?;
     } else {
         sqlx::query("UPDATE profiles SET workspace_id = 'default' WHERE workspace_id = ?")
             .bind(&id)
@@ -144,11 +150,19 @@ pub async fn workspace_delete(
             .await
             .map_err(AppError::db)?;
 
-        sqlx::query("UPDATE proxies SET workspace_id = 'default' WHERE workspace_id = ?")
-            .bind(&id)
-            .execute(&state.db)
-            .await
-            .map_err(AppError::db)?;
+        // Replace workspace tag on proxies: workspace:{id} → workspace:default
+        let old_tag = format!("workspace:{}", id);
+        sqlx::query(
+            "UPDATE proxies SET tags = (
+                SELECT json_group_array(CASE WHEN value = ? THEN 'workspace:default' ELSE value END)
+                FROM json_each(tags)
+            ) WHERE EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?)",
+        )
+        .bind(&old_tag)
+        .bind(&old_tag)
+        .execute(&state.db)
+        .await
+        .map_err(AppError::db)?;
     }
 
     sqlx::query("DELETE FROM workspaces WHERE id = ?")
@@ -172,12 +186,15 @@ pub async fn workspace_stats(
             .await
             .map_err(AppError::db)?;
 
+    let ws_tag = format!("workspace:{}", id);
     let (proxy_count,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM proxies WHERE workspace_id = ?")
-            .bind(&id)
-            .fetch_one(&state.db)
-            .await
-            .map_err(AppError::db)?;
+        sqlx::query_as(
+            "SELECT COUNT(*) FROM proxies WHERE EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?)",
+        )
+        .bind(&ws_tag)
+        .fetch_one(&state.db)
+        .await
+        .map_err(AppError::db)?;
 
     let (active_count,): (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM profiles WHERE workspace_id = ? AND status = 'running'",
@@ -202,20 +219,6 @@ pub async fn profiles_list_by_workspace(
 ) -> CmdResult<Vec<Profile>> {
     sqlx::query_as::<_, Profile>(
         "SELECT * FROM profiles WHERE workspace_id = ? ORDER BY kanban_status, kanban_order, created_at",
-    )
-    .bind(&workspace_id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(AppError::db)
-}
-
-#[tauri::command]
-pub async fn proxies_list_by_workspace(
-    workspace_id: String,
-    state: tauri::State<'_, AppState>,
-) -> CmdResult<Vec<crate::models::Proxy>> {
-    sqlx::query_as::<_, crate::models::Proxy>(
-        "SELECT * FROM proxies WHERE workspace_id = ? ORDER BY created_at DESC",
     )
     .bind(&workspace_id)
     .fetch_all(&state.db)

@@ -47,7 +47,6 @@ const devMocks: Record<string, unknown> = {
   proxies_list: [],
   workspace_list: [],
   profiles_list_by_workspace: [],
-  proxies_list_by_workspace: [],
   workspace_column_list: [],
 };
 
@@ -110,8 +109,6 @@ export const api = {
     check: (id: string) => call<ProxyCheckResult>('proxy_check', { id }),
     trustFingerprint: (id: string, fingerprint: string, ip: string, country: string | null, city: string | null) =>
       call<void>('proxy_trust_fingerprint', { id, fingerprint, ip, country, city }),
-    listByWorkspace: (workspaceId: string) =>
-      call<Proxy[]>('proxies_list_by_workspace', { workspaceId }),
   },
 
   workspaces: {
@@ -202,13 +199,15 @@ export const api = {
     connectionUpdate: (id: string, input: SshConnectionUpdateInput) =>
       call<SshConnection>('ssh_connection_update', { id, input }),
     connectionDelete: (id: string) => call<void>('ssh_connection_delete', { id }),
-    connect: (connectionId: string, totpCode?: string) =>
-      call<string>('ssh_connect', { connectionId, totpCode }),
+    connect: (connectionId: string) =>
+      call<string>('ssh_connect', { connectionId }),
     disconnect: (sessionId: string) => call<void>('ssh_disconnect', { sessionId }),
     sendData: (sessionId: string, data: number[]) =>
       call<void>('ssh_send_data', { sessionId, data }),
     resize: (sessionId: string, cols: number, rows: number) =>
       call<void>('ssh_resize', { sessionId, cols, rows }),
+    respondPrompt: (sessionId: string, response: string) =>
+      call<void>('ssh_respond_prompt', { sessionId, response }),
     sessionList: () => call<SshSessionInfo[]>('ssh_session_list'),
     sessionRemove: (sessionId: string) => call<void>('ssh_session_remove', { sessionId }),
   },

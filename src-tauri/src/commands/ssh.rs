@@ -3,7 +3,7 @@ use crate::AppState;
 use base64::Engine as _;
 use chrono::Utc;
 use russh::{client, ChannelMsg};
-use russh::keys::{decode_secret_key, PrivateKeyWithHashAlg};
+use russh::keys::{decode_secret_key, HashAlg, PrivateKeyWithHashAlg};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::collections::HashMap;
@@ -169,6 +169,8 @@ pub enum SshInputCommand {
     Data(Vec<u8>),
     Resize { cols: u32, rows: u32 },
     Disconnect,
+    /// Response to a keyboard-interactive prompt relayed by the frontend
+    PromptResponse(String),
 }
 
 pub struct SshSessionState {
@@ -192,6 +194,20 @@ struct StatusChangedPayload {
 struct DataPayload {
     session_id: String,
     data_base64: String,
+}
+
+#[derive(Serialize, Clone)]
+struct KeyboardPromptPayload {
+    session_id: String,
+    name: String,
+    instructions: String,
+    prompts: Vec<KeyboardPromptItem>,
+}
+
+#[derive(Serialize, Clone)]
+struct KeyboardPromptItem {
+    prompt: String,
+    echo: bool,
 }
 
 // ── russh Handler ──────────────────────────────────────────────────────────────
@@ -241,22 +257,24 @@ fn emit_data(app: &AppHandle, session_id: &str, data: &[u8]) {
 }
 
 /// Authenticate with the SSH server based on auth_type.
-/// Returns Err if authentication fails.
 async fn do_authenticate(
     handle: &mut client::Handle<TerminalHandler>,
+    app: &AppHandle,
+    session_id: &str,
     username: &str,
     auth_type: &str,
     password: Option<&str>,
     private_key: Option<&str>,
     key_passphrase: Option<&str>,
     requires_2fa: bool,
-    totp_code: Option<&str>,
+    totp_entry_id: Option<&str>,
+    db: &sqlx::SqlitePool,
+    rx: &mut mpsc::Receiver<SshInputCommand>,
 ) -> anyhow::Result<()> {
     match auth_type {
         "password" => {
             if requires_2fa {
-                // Keyboard-interactive: respond with password then TOTP code
-                do_keyboard_interactive(handle, username, password, totp_code).await
+                do_keyboard_interactive(handle, app, session_id, username, password, totp_entry_id, db, rx).await
             } else {
                 let pw = password.unwrap_or("");
                 let result = handle.authenticate_password(username, pw).await?;
@@ -267,48 +285,68 @@ async fn do_authenticate(
                 }
             }
         }
-        "key" => {
+        "key" | "key_password" => {
             let pem = private_key.ok_or_else(|| anyhow::anyhow!("No private key provided"))?;
-            let key = decode_secret_key(pem, None)?;
-            let key_with_alg = PrivateKeyWithHashAlg::new(Arc::new(key), None);
-            let result = handle.authenticate_publickey(username, key_with_alg).await?;
-            if matches!(result, russh::client::AuthResult::Success) {
-                Ok(())
+            let pem = pem.trim();
+
+            let key = if auth_type == "key_password" {
+                let passphrase = key_passphrase.unwrap_or("");
+                russh::keys::PrivateKey::from_openssh(pem)
+                    .or_else(|_| decode_secret_key(pem, Some(passphrase)))
+                    .map_err(|e| anyhow::anyhow!("Failed to parse private key: {e}"))?
             } else {
-                anyhow::bail!("Public key authentication failed")
-            }
-        }
-        "key_password" => {
-            let pem = private_key.ok_or_else(|| anyhow::anyhow!("No private key provided"))?;
-            let passphrase = key_passphrase.unwrap_or("");
-            let key = decode_secret_key(pem, Some(passphrase))?;
-            let key_with_alg = PrivateKeyWithHashAlg::new(Arc::new(key), None);
+                russh::keys::PrivateKey::from_openssh(pem)
+                    .or_else(|_| decode_secret_key(pem, None))
+                    .map_err(|e| anyhow::anyhow!("Failed to parse private key: {e}"))?
+            };
+
+            let algo = key.algorithm();
+            let algo_str = format!("{algo}");
+            let fingerprint = key.fingerprint(HashAlg::Sha256);
+            let hash_alg = if algo.is_rsa() { Some(HashAlg::Sha256) } else { None };
+            let key_with_alg = PrivateKeyWithHashAlg::new(Arc::new(key), hash_alg);
+            let auth_algo = key_with_alg.algorithm();
+
             let result = handle.authenticate_publickey(username, key_with_alg).await?;
-            if matches!(result, russh::client::AuthResult::Success) {
-                Ok(())
-            } else {
-                anyhow::bail!("Public key (with passphrase) authentication failed")
+            match result {
+                russh::client::AuthResult::Success => Ok(()),
+                russh::client::AuthResult::Failure { partial_success: true, ref remaining_methods }
+                    if remaining_methods.iter().any(|m| matches!(m, russh::MethodKind::KeyboardInteractive)) =>
+                {
+                    do_keyboard_interactive(handle, app, session_id, username, password, totp_entry_id, db, rx).await
+                }
+                russh::client::AuthResult::Failure { remaining_methods, .. } => {
+                    let methods: Vec<String> = remaining_methods.iter().map(|m| format!("{m:?}")).collect();
+                    anyhow::bail!(
+                        "Public key authentication failed.\n\
+                         Key: {algo_str} / {auth_algo}, Fingerprint: {fingerprint}\n\
+                         Server remaining: [{}]\n\
+                         Check that the public key is in ~/.ssh/authorized_keys on the server.",
+                        methods.join(", ")
+                    )
+                }
+                other => anyhow::bail!("Unexpected auth result: {other:?}"),
             }
         }
         other => anyhow::bail!("Unknown auth_type: {other}"),
     }
 }
 
-/// Keyboard-interactive auth: responds to server prompts with password then TOTP.
+/// Keyboard-interactive auth.
+/// Prompts are auto-answered with:
+///   1. Stored password (if prompt contains "password")
+///   2. TOTP code generated from linked profile (if prompt contains "verification" / "code" / etc.)
+///   3. Otherwise relayed to the frontend overlay for interactive input.
 async fn do_keyboard_interactive(
     handle: &mut client::Handle<TerminalHandler>,
+    app: &AppHandle,
+    session_id: &str,
     username: &str,
-    password: Option<&str>,
-    totp_code: Option<&str>,
+    auto_password: Option<&str>,
+    totp_entry_id: Option<&str>,
+    db: &sqlx::SqlitePool,
+    rx: &mut mpsc::Receiver<SshInputCommand>,
 ) -> anyhow::Result<()> {
-    let mut responses: Vec<String> = Vec::new();
-    if let Some(pw) = password {
-        responses.push(pw.to_string());
-    }
-    if let Some(code) = totp_code {
-        responses.push(code.to_string());
-    }
-
     let mut result = handle
         .authenticate_keyboard_interactive_start(username, None)
         .await?;
@@ -316,26 +354,99 @@ async fn do_keyboard_interactive(
     loop {
         match result {
             russh::client::KeyboardInteractiveAuthResponse::Success => return Ok(()),
-            russh::client::KeyboardInteractiveAuthResponse::InfoRequest { prompts, .. } => {
-                let answers: Vec<String> = prompts
-                    .iter()
-                    .map(|_| {
-                        if !responses.is_empty() {
-                            responses.remove(0)
+            russh::client::KeyboardInteractiveAuthResponse::Failure { .. } => {
+                anyhow::bail!("Keyboard-interactive authentication failed")
+            }
+            russh::client::KeyboardInteractiveAuthResponse::InfoRequest { name, instructions, prompts } => {
+                let mut answers: Vec<String> = Vec::with_capacity(prompts.len());
+
+                for (i, prompt) in prompts.iter().enumerate() {
+                    let prompt_lower = prompt.prompt.to_lowercase();
+
+                    let is_password_prompt = prompt_lower.contains("password")
+                        || prompt_lower.contains("пароль")
+                        || prompt_lower.contains("passwd");
+
+                    let is_totp_prompt = prompt_lower.contains("verification")
+                        || prompt_lower.contains("code")
+                        || prompt_lower.contains("totp")
+                        || prompt_lower.contains("2fa")
+                        || prompt_lower.contains("authenticator")
+                        || prompt_lower.contains("otp");
+
+                    let auto = if is_password_prompt {
+                        auto_password.map(|s| s.to_string())
+                    } else if is_totp_prompt {
+                        // Try to generate TOTP code from linked profile
+                        if let Some(entry_id) = totp_entry_id {
+                            generate_totp_code(db, entry_id).await.ok()
                         } else {
-                            String::new()
+                            None
                         }
-                    })
-                    .collect();
+                    } else {
+                        None
+                    };
+
+                    let answer = if let Some(a) = auto {
+                        a
+                    } else {
+                        // Relay the whole InfoRequest to frontend — frontend sends one response per prompt
+                        let _ = app.emit(
+                            "ssh://keyboard-prompt",
+                            KeyboardPromptPayload {
+                                session_id: session_id.to_string(),
+                                name: name.clone(),
+                                instructions: instructions.clone(),
+                                // Only send remaining prompts starting from i
+                                prompts: prompts[i..].iter().map(|p| KeyboardPromptItem {
+                                    prompt: p.prompt.clone(),
+                                    echo: p.echo,
+                                }).collect(),
+                            },
+                        );
+
+                        loop {
+                            match tokio::time::timeout(
+                                std::time::Duration::from_secs(120),
+                                rx.recv(),
+                            ).await {
+                                Ok(Some(SshInputCommand::PromptResponse(r))) => break r,
+                                Ok(Some(SshInputCommand::Disconnect)) | Ok(None) => {
+                                    anyhow::bail!("Disconnected during authentication");
+                                }
+                                Err(_) => anyhow::bail!("Authentication timeout (120s)"),
+                                Ok(Some(_)) => {}
+                            }
+                        }
+                    };
+
+                    answers.push(answer);
+                }
+
                 result = handle
                     .authenticate_keyboard_interactive_respond(answers)
                     .await?;
             }
-            russh::client::KeyboardInteractiveAuthResponse::Failure { .. } => {
-                anyhow::bail!("Keyboard-interactive authentication failed")
-            }
         }
     }
+}
+
+/// Generate a TOTP code for the given entry_id from the database.
+async fn generate_totp_code(db: &sqlx::SqlitePool, entry_id: &str) -> anyhow::Result<String> {
+    use crate::commands::totp::{TotpEntry, build_totp};
+    let entry = sqlx::query_as::<_, TotpEntry>(
+        "SELECT * FROM totp_entries WHERE id = ?",
+    )
+    .bind(entry_id)
+    .fetch_optional(db)
+    .await?
+    .ok_or_else(|| anyhow::anyhow!("TOTP entry {entry_id} not found"))?;
+
+    let totp = build_totp(&entry).map_err(|e| anyhow::anyhow!("{e:?}"))?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_secs();
+    Ok(totp.generate(now))
 }
 
 // ── CRUD Commands ──────────────────────────────────────────────────────────────
@@ -565,12 +676,12 @@ pub async fn ssh_connection_update(
             port                = COALESCE(?, port),
             username            = COALESCE(?, username),
             auth_type           = COALESCE(?, auth_type),
-            password            = CASE WHEN ? IS NOT NULL THEN ? ELSE password END,
-            private_key         = CASE WHEN ? IS NOT NULL THEN ? ELSE private_key END,
-            key_passphrase      = CASE WHEN ? IS NOT NULL THEN ? ELSE key_passphrase END,
+            password            = ?,
+            private_key         = ?,
+            key_passphrase      = ?,
             requires_2fa        = COALESCE(?, requires_2fa),
-            totp_entry_id       = CASE WHEN ? IS NOT NULL THEN ? ELSE totp_entry_id END,
-            proxy_id            = CASE WHEN ? IS NOT NULL THEN ? ELSE proxy_id END,
+            totp_entry_id       = ?,
+            proxy_id            = ?,
             connect_timeout_sec = COALESCE(?, connect_timeout_sec),
             keepalive_sec       = COALESCE(?, keepalive_sec),
             terminal_theme      = CASE WHEN ? IS NOT NULL THEN ? ELSE terminal_theme END,
@@ -584,12 +695,12 @@ pub async fn ssh_connection_update(
     .bind(input.port)
     .bind(&input.username)
     .bind(&input.auth_type)
-    .bind(&input.password).bind(&input.password)
-    .bind(&input.private_key).bind(&input.private_key)
-    .bind(&input.key_passphrase).bind(&input.key_passphrase)
+    .bind(&input.password)
+    .bind(&input.private_key)
+    .bind(&input.key_passphrase)
     .bind(input.requires_2fa.map(|v| v as i64))
-    .bind(&input.totp_entry_id).bind(&input.totp_entry_id)
-    .bind(&input.proxy_id).bind(&input.proxy_id)
+    .bind(&input.totp_entry_id)
+    .bind(&input.proxy_id)
     .bind(input.connect_timeout_sec)
     .bind(input.keepalive_sec)
     .bind(&input.terminal_theme).bind(&input.terminal_theme)
@@ -639,7 +750,6 @@ pub async fn ssh_connect(
     app: AppHandle,
     state: State<'_, AppState>,
     connection_id: String,
-    totp_code: Option<String>,
 ) -> CmdResult<String> {
     let conn = ssh_connection_get(state.clone(), connection_id.clone()).await?;
 
@@ -682,6 +792,7 @@ pub async fn ssh_connect(
 
     let sessions_arc = state.ssh_sessions.clone();
     let db = state.db.clone();
+    let db_update = db.clone();
     let session_id_ret = session_id.clone();
 
     tokio::spawn(async move {
@@ -690,7 +801,7 @@ pub async fn ssh_connect(
             &session_id,
             &conn,
             proxy,
-            totp_code.as_deref(),
+            db,
             rx,
         )
         .await;
@@ -716,7 +827,7 @@ pub async fn ssh_connect(
         )
         .bind(Utc::now().to_rfc3339())
         .bind(&conn.id)
-        .execute(&db)
+        .execute(&db_update)
         .await;
     });
 
@@ -781,7 +892,7 @@ async fn run_session(
     session_id: &str,
     conn: &SshConnection,
     proxy: Option<crate::models::Proxy>,
-    totp_code: Option<&str>,
+    db: sqlx::SqlitePool,
     mut rx: mpsc::Receiver<SshInputCommand>,
 ) -> anyhow::Result<()> {
     let config = Arc::new(client::Config::default());
@@ -845,13 +956,17 @@ async fn run_session(
     // Authenticate
     do_authenticate(
         &mut handle,
+        app,
+        session_id,
         &conn.username,
         &conn.auth_type,
         conn.password.as_deref(),
         conn.private_key.as_deref(),
         conn.key_passphrase.as_deref(),
         conn.requires_2fa,
-        totp_code,
+        conn.totp_entry_id.as_deref(),
+        &db,
+        &mut rx,
     )
     .await?;
 
@@ -898,6 +1013,7 @@ async fn run_session(
                         channel.window_change(cols, rows, 0, 0).await?;
                     }
                     Some(SshInputCommand::Disconnect) | None => break,
+                    Some(SshInputCommand::PromptResponse(_)) => {} // handled during auth phase
                 }
             }
         }
@@ -962,5 +1078,21 @@ pub async fn ssh_session_remove(
 ) -> CmdResult<()> {
     let mut sessions = state.ssh_sessions.write().map_err(|e| AppError::other(e.to_string()))?;
     sessions.remove(&session_id);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn ssh_respond_prompt(
+    state: State<'_, AppState>,
+    session_id: String,
+    response: String,
+) -> CmdResult<()> {
+    let sender = {
+        let sessions = state.ssh_sessions.read().map_err(|e| AppError::other(e.to_string()))?;
+        sessions.get(&session_id).map(|s| s.writer.clone())
+    };
+    if let Some(tx) = sender {
+        let _ = tx.send(SshInputCommand::PromptResponse(response)).await;
+    }
     Ok(())
 }

@@ -64,7 +64,8 @@ class NotesStore {
 
   /** Open a note in the editor */
   async openNote(id: string) {
-    if (this.activeNoteId === id) return;
+    // Allow retry if note was selected but failed to load (activeNote is null)
+    if (this.activeNoteId === id && this.activeNote !== null) return;
 
     // Capture pending save for the OLD note before switching
     if (this._autosaveTimer) { clearTimeout(this._autosaveTimer); this._autosaveTimer = null; }
@@ -96,8 +97,12 @@ class NotesStore {
       if (this.activeNoteId === id) {
         this.activeNote = loaded;
       }
-    } catch {
-      if (this.activeNoteId === id) this.activeNote = null;
+    } catch (e) {
+      console.error('[notes] Failed to load note:', id, e);
+      // Only clear activeNote if watcher hasn't already loaded it
+      if (this.activeNoteId === id && this.activeNote === null) {
+        // activeNote already null — nothing to do, state stays as "failed to load"
+      }
     }
   }
 

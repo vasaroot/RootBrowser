@@ -100,23 +100,30 @@ class SshStore {
     ).then((fn) => this.unlisten.push(fn));
   }
 
-  async connect(connectionId: string, totpCode?: string): Promise<string> {
-    const sessionId = await api.ssh.connect(connectionId, totpCode);
+  async connect(connectionId: string): Promise<string> {
+    const sessionId = await api.ssh.connect(connectionId);
 
-    const conn = this.connections.find((c) => c.id === connectionId);
-    if (conn) {
-      const info: SshSessionInfo = {
-        session_id: sessionId,
-        connection_id: connectionId,
-        connection_name: conn.name,
-        host: conn.host,
-        port: conn.port,
-        status: 'connecting',
-        error: null,
-        connected_at: null,
-      };
-      this.sessions = [...this.sessions, info];
+    let conn = this.connections.find((c) => c.id === connectionId);
+    // If not in store yet (e.g. called from profile tab with its own local list),
+    // fetch it so the session info is complete and the terminal can render.
+    if (!conn) {
+      try {
+        conn = await api.ssh.connectionGet(connectionId);
+        this.connections = [...this.connections, conn];
+      } catch {}
     }
+
+    const info: SshSessionInfo = {
+      session_id: sessionId,
+      connection_id: connectionId,
+      connection_name: conn?.name ?? connectionId,
+      host: conn?.host ?? '',
+      port: conn?.port ?? 22,
+      status: 'connecting',
+      error: null,
+      connected_at: null,
+    };
+    this.sessions = [...this.sessions, info];
 
     // Auto-open terminal for the new session
     this.activeTerminalId = sessionId;

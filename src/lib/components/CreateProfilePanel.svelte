@@ -13,12 +13,26 @@
 
   interface Props {
     workspaceId: string;
+    /** All proxies (workspace-tagged shown first) */
     proxies: Proxy[];
     onclose: () => void;
     oncreated: () => void;
   }
 
   let { workspaceId, proxies, onclose, oncreated }: Props = $props();
+
+  const wsTag = $derived(`workspace:${workspaceId}`);
+  const proxyOptions = $derived.by(() => {
+    const ws = proxies.filter(p => p.tags.includes(wsTag));
+    const other = proxies.filter(p => !p.tags.includes(wsTag));
+    const toOpt = (p: Proxy) => ({ label: `${p.name} (${p.proxy_type}://${p.host}:${p.port})`, value: p.id });
+    return [
+      { label: $t('profile_proxy_none'), value: null as string | null },
+      ...ws.map(toOpt),
+      ...(other.length > 0 && ws.length > 0 ? [{ label: '— ' + $t('proxies_other') + ' —', value: null, disabled: true }] : []),
+      ...other.map(toOpt),
+    ];
+  });
 
   let presets = $state<PresetInfo[]>([]);
   let saving = $state(false);
@@ -159,10 +173,7 @@
             <CustomSelect
               id="cp-proxy"
               bind:value={form.proxy_id}
-              options={[
-                { label: $t('profile_proxy_none'), value: null },
-                ...proxies.map(p => ({ label: `${p.name} (${p.proxy_type}://${p.host}:${p.port})`, value: p.id })),
-              ]}
+              options={proxyOptions}
             />
           </div>
         </div>

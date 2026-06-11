@@ -229,7 +229,9 @@ async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
     .await?;
     add_column_if_not_exists(pool, "proxies", "private_key", "TEXT").await?;
     add_column_if_not_exists(pool, "proxies", "server_fingerprint", "TEXT").await?;
+    add_column_if_not_exists(pool, "proxies", "tags", "TEXT NOT NULL DEFAULT '[]'").await?;
     add_column_if_not_exists(pool, "notes", "preview", "TEXT NOT NULL DEFAULT ''").await?;
+    add_column_if_not_exists(pool, "notes", "bindings", "TEXT NOT NULL DEFAULT '[]'").await?;
 
     // ── SSH Layer ──────────────────────────────────────────────────────────────
     sqlx::query(
@@ -347,13 +349,44 @@ async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
         .await?;
     }
 
-    // Assign orphaned records to Default workspace
+    // Assign orphaned profile records to Default workspace
     sqlx::query("UPDATE profiles SET workspace_id = 'default' WHERE workspace_id IS NULL")
         .execute(pool)
         .await?;
+    // Keep workspace_id on proxies for the migration step below; orphans get 'default'
     sqlx::query("UPDATE proxies SET workspace_id = 'default' WHERE workspace_id IS NULL")
         .execute(pool)
         .await?;
+
+    // Migrate proxy workspace_id → tags (idempotent: only proxies with empty tags)
+    sqlx::query(
+        "UPDATE proxies SET tags = json_array('workspace:' || workspace_id)
+         WHERE workspace_id IS NOT NULL AND tags = '[]'",
+    )
+    .execute(pool)
+    .await?;
+
+    // Migrate notes scope/workspace_id/profile_id → bindings (idempotent)
+    sqlx::query(
+        "UPDATE notes SET bindings = json_array('workspace:' || workspace_id)
+         WHERE scope = 'workspace' AND workspace_id IS NOT NULL AND bindings = '[]'",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "UPDATE notes SET bindings = json_array('workspace:' || workspace_id, 'profile:' || profile_id)
+         WHERE scope = 'profile' AND workspace_id IS NOT NULL AND profile_id IS NOT NULL AND bindings = '[]'",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "UPDATE notes SET bindings = json_array('profile:' || profile_id)
+         WHERE scope = 'profile' AND workspace_id IS NULL AND profile_id IS NOT NULL AND bindings = '[]'",
+    )
+    .execute(pool)
+    .await?;
 
     Ok(())
 }

@@ -170,11 +170,12 @@ pub struct Proxy {
     pub status: String,
     pub last_ip: Option<String>,
     pub last_check_at: Option<DateTime<Utc>>,
-    pub workspace_id: Option<String>,
     pub private_key: Option<String>,
     /// SHA256 fingerprint of the SSH server's host key, saved on first successful connection (TOFU).
     /// None = never connected. On mismatch — connection is blocked.
     pub server_fingerprint: Option<String>,
+    #[serde(serialize_with = "serialize_tags_as_vec")]
+    pub tags: String,
     pub created_at: DateTime<Utc>,
 }
 
@@ -184,7 +185,7 @@ pub struct CreateProxyRequest {
     pub proxy_type: String,
     pub host: String,
     pub port: i64,
-    pub workspace_id: Option<String>,
+    pub tags: Option<Vec<String>>,
     pub username: Option<String>,
     pub password: Option<String>,
     pub country: Option<String>,

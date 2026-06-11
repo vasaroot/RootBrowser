@@ -4,10 +4,23 @@
   import { FitAddon } from '@xterm/addon-fit';
   import { WebLinksAddon } from '@xterm/addon-web-links';
   import '@xterm/xterm/css/xterm.css';
+  import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { sshStore } from '$lib/store/ssh.svelte';
   import { api } from '$lib/api';
   import Icon from '$lib/Icon.svelte';
   import { t } from '$lib/i18n';
+
+  interface KeyboardPromptItem {
+    prompt: string;
+    echo: boolean;
+  }
+
+  interface KeyboardPromptPayload {
+    session_id: string;
+    name: string;
+    instructions: string;
+    prompts: KeyboardPromptItem[];
+  }
 
   interface Props {
     sessionId: string;
@@ -22,9 +35,16 @@
   let term: Terminal | null = null;
   let fitAddon: FitAddon | null = null;
   let resizeObserver: ResizeObserver | null = null;
+  let unlistenPrompt: UnlistenFn | null = null;
+
+  // Keyboard-interactive overlay state
+  let activePrompt = $state<KeyboardPromptPayload | null>(null);
+  let promptInputs = $state<string[]>([]);
+  let promptError = $state('');
+  let promptSubmitting = $state(false);
 
   // Drawer size state
-  const SESSION_BAR_H = 34; // px — approximate height of SSHSessionBar
+  const SESSION_BAR_H = 34;
   const DEFAULT_VH = 45;
   let drawerVh = $state(DEFAULT_VH);
   let isMaximized = $state(false);
@@ -64,7 +84,26 @@
     }));
   }
 
-  onMount(() => {    if (!termEl) return;
+  async function submitPromptResponses() {
+    if (!activePrompt || promptSubmitting) return;
+    promptSubmitting = true;
+    promptError = '';
+    try {
+      // Send each answer one at a time — backend waits per prompt
+      for (const answer of promptInputs) {
+        await api.ssh.respondPrompt(sessionId, answer);
+      }
+      activePrompt = null;
+      promptInputs = [];
+    } catch (e: unknown) {
+      promptError = String(e);
+    } finally {
+      promptSubmitting = false;
+    }
+  }
+
+  onMount(async () => {
+    if (!termEl) return;
 
     term = new Terminal({
       cursorBlink: true,
@@ -95,7 +134,6 @@
     });
     resizeObserver.observe(termEl);
 
-    // Fit first — get real dimensions, then register and flush buffered data
     requestAnimationFrame(() => requestAnimationFrame(() => {
       fitAddon?.fit();
       syncSize();
@@ -103,9 +141,22 @@
         term?.write(bytes);
       });
     }));
+
+    // Listen for keyboard-interactive prompts from backend
+    unlistenPrompt = await listen<KeyboardPromptPayload>('ssh://keyboard-prompt', (event) => {
+      if (event.payload.session_id !== sessionId) return;
+      activePrompt = event.payload;
+      promptInputs = event.payload.prompts.map(() => '');
+      promptError = '';
+      // Ensure terminal is visible when prompt arrives
+      if (!visible) {
+        sshStore.activeTerminalId = sessionId;
+      }
+    });
   });
 
   onDestroy(() => {
+    unlistenPrompt?.();
     resizeObserver?.disconnect();
     sshStore.unregisterDataCallback(sessionId);
     term?.dispose();
@@ -196,6 +247,54 @@
     {/if}
 
     <div class="xterm-container" bind:this={termEl}></div>
+
+    {#if activePrompt}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="prompt-overlay">
+        <div class="prompt-card">
+          {#if activePrompt.name}
+            <div class="prompt-title">{activePrompt.name}</div>
+          {/if}
+          {#if activePrompt.instructions}
+            <div class="prompt-instructions">{activePrompt.instructions}</div>
+          {/if}
+          {#each activePrompt.prompts as p, i}
+            <div class="prompt-field">
+              <!-- svelte-ignore a11y_label_has_associated_control -->
+              <label>{p.prompt}</label>
+              {#if p.echo}
+                <!-- svelte-ignore a11y_autofocus -->
+                <input
+                  type="text"
+                  autofocus={i === 0}
+                  bind:value={promptInputs[i]}
+                  onkeydown={(e) => e.key === 'Enter' && i === activePrompt!.prompts.length - 1 && submitPromptResponses()}
+                />
+              {:else}
+                <!-- svelte-ignore a11y_autofocus -->
+                <input
+                  type="password"
+                  autofocus={i === 0}
+                  bind:value={promptInputs[i]}
+                  onkeydown={(e) => e.key === 'Enter' && i === activePrompt!.prompts.length - 1 && submitPromptResponses()}
+                />
+              {/if}
+            </div>
+          {/each}
+          {#if promptError}
+            <div class="prompt-error">{promptError}</div>
+          {/if}
+          <div class="prompt-actions">
+            <button class="btn-sm btn-ghost" onclick={() => { activePrompt = null; promptInputs = []; }} disabled={promptSubmitting}>
+              {$t('ssh_btn_cancel')}
+            </button>
+            <button class="btn-sm btn-primary" onclick={submitPromptResponses} disabled={promptSubmitting}>
+              {promptSubmitting ? $t('ssh_connecting') : $t('ssh_btn_send')}
+            </button>
+          </div>
+        </div>
+      </div>
+    {/if}
   </div>
 </div>
 
@@ -219,7 +318,6 @@
     opacity: 0;
     pointer-events: none;
   }
-  /* Suppress height transition while dragging */
   .terminal-drawer.dragging { transition: none; }
 
   .terminal-wrap {
@@ -231,9 +329,9 @@
     border-top: 2px solid #1e293b;
     box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
     overflow: hidden;
+    position: relative;
   }
 
-  /* Resize handle */
   .drawer-handle {
     height: 5px;
     background: #0d1117;
@@ -254,7 +352,6 @@
   }
   .drawer-handle:hover .handle-grip { background: #4a5568; }
 
-  /* Compact header */
   .terminal-header {
     display: flex;
     align-items: center;
@@ -281,7 +378,6 @@
   .dot.yellow { background: #f59e0b; }
   .dot.red { background: #ef4444; }
 
-  /* Compact action buttons — macOS-style grouping */
   .header-actions {
     display: flex;
     gap: 0;
@@ -326,4 +422,68 @@
   .xterm-container :global(.xterm) { height: 100%; width: 100%; }
   .xterm-container :global(.xterm-screen) { height: 100%; width: 100%; }
   .xterm-container :global(.xterm-viewport) { overflow-y: auto; }
+
+  /* Keyboard-interactive overlay */
+  .prompt-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(13, 17, 23, 0.85);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+  .prompt-card {
+    background: #0f1923;
+    border: 1px solid #1e3a5f;
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    min-width: 320px;
+    max-width: 480px;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  }
+  .prompt-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #e2e8f0;
+  }
+  .prompt-instructions {
+    font-size: 0.8rem;
+    color: #64748b;
+  }
+  .prompt-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .prompt-field label {
+    font-size: 0.8rem;
+    color: #94a3b8;
+  }
+  .prompt-field input {
+    background: #1a2535;
+    border: 1px solid #2a3f5f;
+    border-radius: 5px;
+    padding: 0.45rem 0.6rem;
+    color: #e2e8f0;
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .prompt-field input:focus { border-color: #3b82f6; }
+  .prompt-error {
+    font-size: 0.78rem;
+    color: #f87171;
+  }
+  .prompt-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+  }
 </style>

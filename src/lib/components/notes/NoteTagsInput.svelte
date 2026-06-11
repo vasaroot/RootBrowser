@@ -56,8 +56,8 @@
 </script>
 
 <div class="tags-input-wrap">
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div class="tags-field" onclick={() => inputEl?.focus()}>
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="tags-field" role="none" onclick={() => inputEl?.focus()}>
     {#each selectedTags as tag (tag.id)}
       <span class="tag-chip" style="border-color: {tag.color}; color: {tag.color}; background: {tag.color}18">
         {tag.name}

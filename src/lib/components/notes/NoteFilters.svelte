@@ -35,8 +35,12 @@
     collapsedWs = next;
   }
 
+  function isGlobal(bindings: string[]): boolean {
+    return !bindings.some(b => b.startsWith('workspace:') || b.startsWith('profile:'));
+  }
+
   const countAll = $derived(notes.filter((n) => !n.archived).length);
-  const countGlobal = $derived(notes.filter((n) => n.scope === 'global' && !n.archived).length);
+  const countGlobal = $derived(notes.filter((n) => isGlobal(n.bindings) && !n.archived).length);
   const countPinned = $derived(notes.filter((n) => n.pinned && !n.archived).length);
   const countArchived = $derived(notes.filter((n) => n.archived).length);
 
@@ -57,9 +61,15 @@
   // Workspace tree
   const workspaceTree = $derived.by(() => {
     return workspacesStore.list.map((ws) => {
-      const wsNotes = notes.filter((n) => n.workspace_id === ws.id && n.scope === 'workspace' && !n.archived);
+      const wsTag = `workspace:${ws.id}`;
+      // Workspace-level notes: have workspace binding but no profile binding
+      const wsNotes = notes.filter((n) =>
+        n.bindings.includes(wsTag) &&
+        !n.bindings.some(b => b.startsWith('profile:')) &&
+        !n.archived
+      );
       const profiles = profilesStore.byWorkspace(ws.id).map((p) => {
-        const pNotes = notes.filter((n) => n.profile_id === p.id && !n.archived);
+        const pNotes = notes.filter((n) => n.bindings.includes(`profile:${p.id}`) && !n.archived);
         return { ...p, noteCount: pNotes.length };
       }).filter((p) => p.noteCount > 0);
       return { ...ws, noteCount: wsNotes.length, profiles };

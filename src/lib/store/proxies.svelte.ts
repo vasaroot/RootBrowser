@@ -25,7 +25,7 @@ class ProxiesStore {
   }
 
   byWorkspace(id: string): Proxy[] {
-    return this.list.filter((p) => p.workspace_id === id);
+    return this.list.filter((p) => p.tags.includes(`workspace:${id}`));
   }
 }
 

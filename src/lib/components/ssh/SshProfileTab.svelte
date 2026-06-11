@@ -87,8 +87,13 @@
     editConn = null;
   }
 
+  let connectError = $state('');
+
   function handleConnect(conn: SshConnection) {
-    sshStore.connect(conn.id).catch(() => {});
+    connectError = '';
+    sshStore.connect(conn.id).catch((e: unknown) => {
+      connectError = String(e);
+    });
   }
 </script>
 
@@ -162,6 +167,10 @@
       onOpenTerminal={() => {}}
     />
 
+    {#if connectError}
+      <div class="connect-error">{connectError}</div>
+    {/if}
+
     <button class="open-panel-btn" onclick={() => sshStore.openPanel()}>
       <Icon name="settings" size={12} /> {$t('ssh_btn_manage_all')}
     </button>
@@ -222,4 +231,13 @@
     transition: all 0.12s; margin-top: 0.25rem;
   }
   .open-panel-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .connect-error {
+    background: var(--danger-bg);
+    color: var(--danger-text);
+    border-radius: var(--radius-sm);
+    padding: 0.35rem 0.6rem;
+    font-size: 0.78rem;
+    word-break: break-all;
+  }
 </style>

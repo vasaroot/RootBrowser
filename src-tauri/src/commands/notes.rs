@@ -18,6 +18,7 @@ struct NoteRow {
     pub title: String,
     pub file_path: String,
     pub format: String,
+    // Legacy columns kept for SELECT * compatibility; bindings is the new source of truth
     pub scope: String,
     pub workspace_id: Option<String>,
     pub profile_id: Option<String>,
@@ -32,6 +33,8 @@ struct NoteRow {
     pub file_mtime: Option<String>,
     pub content_hash: Option<String>,
     pub preview: String,
+    /// JSON array of binding strings, e.g. ["workspace:id", "profile:id"]
+    pub bindings: String,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -40,9 +43,7 @@ pub struct Note {
     pub title: String,
     pub file_path: String,
     pub format: String,
-    pub scope: String,
-    pub workspace_id: Option<String>,
-    pub profile_id: Option<String>,
+    pub bindings: Vec<String>,
     pub tags: Vec<NoteTagInfo>,
     pub pinned: bool,
     pub archived: bool,
@@ -59,9 +60,7 @@ pub struct NoteListItem {
     pub id: String,
     pub title: String,
     pub format: String,
-    pub scope: String,
-    pub workspace_id: Option<String>,
-    pub profile_id: Option<String>,
+    pub bindings: Vec<String>,
     pub tags: Vec<NoteTagInfo>,
     pub pinned: bool,
     pub archived: bool,
@@ -92,9 +91,8 @@ pub struct NoteTag {
 pub struct NoteCreateInput {
     pub title: String,
     pub format: Option<String>,
-    pub scope: Option<String>,
-    pub workspace_id: Option<String>,
-    pub profile_id: Option<String>,
+    /// Context bindings, e.g. ["workspace:id", "profile:id"]
+    pub bindings: Option<Vec<String>>,
     pub tag_names: Option<Vec<String>>,
     pub content: Option<String>,
 }
@@ -108,9 +106,8 @@ pub struct NoteUpdateInput {
 
 #[derive(Debug, Deserialize, Default)]
 pub struct NoteFilter {
-    pub scope: Option<String>,
-    pub workspace_id: Option<String>,
-    pub profile_id: Option<String>,
+    /// Filter notes that contain this binding, e.g. "workspace:id" or "profile:id"
+    pub binding: Option<String>,
     pub tag_name: Option<String>,
     pub pinned: Option<bool>,
     pub archived: Option<bool>,
@@ -197,8 +194,9 @@ fn write_note_file(
     tags: &[String],
     content: &str,
 ) -> Result<(), AppError> {
-    let ws_val = row.workspace_id.as_deref().unwrap_or("null");
-    let pr_val = row.profile_id.as_deref().unwrap_or("null");
+    let bindings_vec: Vec<String> = serde_json::from_str(&row.bindings).unwrap_or_default();
+    let bindings_json = serde_json::to_string(&bindings_vec).unwrap_or_else(|_| "[]".to_string());
+
     let tags_yaml = if tags.is_empty() {
         "  []\n".to_string()
     } else {
@@ -206,10 +204,9 @@ fn write_note_file(
     };
 
     let frontmatter = format!(
-        "---\nid: {}\ntitle: {}\nformat: {}\nscope: {}\nworkspace_id: {}\nprofile_id: {}\ntags:\n{}created_at: {}\nupdated_at: {}\n---\n",
-        row.id, row.title, row.format, row.scope,
-        ws_val, pr_val, tags_yaml,
-        row.created_at, row.updated_at
+        "---\nid: {}\ntitle: {}\nformat: {}\nbindings: {}\ntags:\n{}created_at: {}\nupdated_at: {}\n---\n",
+        row.id, row.title, row.format, bindings_json,
+        tags_yaml, row.created_at, row.updated_at
     );
 
     let full = format!("{}{}", frontmatter, content);
@@ -433,9 +430,7 @@ struct ManifestEntry {
     title: String,
     file_path: String,
     format: String,
-    scope: String,
-    workspace_id: Option<String>,
-    profile_id: Option<String>,
+    bindings: Vec<String>,
     tags: Vec<String>,
     created_at: String,
     updated_at: String,
@@ -469,14 +464,13 @@ async fn rebuild_manifest(
                 .get(&r.id)
                 .map(|v| v.iter().map(|t| t.name.clone()).collect())
                 .unwrap_or_default();
+            let bindings: Vec<String> = serde_json::from_str(&r.bindings).unwrap_or_default();
             ManifestEntry {
                 id: r.id,
                 title: r.title,
                 file_path: r.file_path,
                 format: r.format,
-                scope: r.scope,
-                workspace_id: r.workspace_id,
-                profile_id: r.profile_id,
+                bindings,
                 tags,
                 created_at: r.created_at,
                 updated_at: r.updated_at,
@@ -561,13 +555,6 @@ pub async fn sync_notes_index(
             let Ok((kv, tags, body)) = read_note_file(&path) else { continue };
             let title = kv.get("title").cloned().unwrap_or_else(|| note_id.clone());
             let format = ext.to_string();
-            let scope = kv.get("scope").cloned().unwrap_or_else(|| "global".to_string());
-            let workspace_id: Option<String> = kv.get("workspace_id")
-                .filter(|v| *v != "null")
-                .cloned();
-            let profile_id: Option<String> = kv.get("profile_id")
-                .filter(|v| *v != "null")
-                .cloned();
             let created_at = kv.get("created_at").cloned().unwrap_or_else(|| now.clone());
             let updated_at = kv.get("updated_at").cloned().unwrap_or_else(|| now.clone());
             let file_path = path.to_string_lossy().to_string();
@@ -577,18 +564,30 @@ pub async fn sync_notes_index(
             ));
             let preview = make_preview(&body);
 
+            // Read bindings from frontmatter; fall back to old scope/workspace_id/profile_id fields
+            let bindings_json = if let Some(b) = kv.get("bindings") {
+                b.clone()
+            } else {
+                let scope = kv.get("scope").map(|s| s.as_str()).unwrap_or("global");
+                let workspace_id = kv.get("workspace_id").filter(|v| *v != "null").cloned();
+                let profile_id = kv.get("profile_id").filter(|v| *v != "null").cloned();
+                let mut b: Vec<String> = Vec::new();
+                if let Some(ws) = workspace_id { b.push(format!("workspace:{}", ws)); }
+                if let Some(pr) = profile_id { b.push(format!("profile:{}", pr)); }
+                let _ = scope;
+                serde_json::to_string(&b).unwrap_or_else(|_| "[]".to_string())
+            };
+
             sqlx::query(
                 "INSERT OR IGNORE INTO notes
-                 (id, title, file_path, format, scope, workspace_id, profile_id, created_at, updated_at, file_mtime, content_hash, preview, doc_status)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')",
+                 (id, title, file_path, format, bindings, created_at, updated_at, file_mtime, content_hash, preview, doc_status)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')",
             )
             .bind(&note_id)
             .bind(&title)
             .bind(&file_path)
             .bind(&format)
-            .bind(&scope)
-            .bind(&workspace_id)
-            .bind(&profile_id)
+            .bind(&bindings_json)
             .bind(&created_at)
             .bind(&updated_at)
             .bind(&mtime)
@@ -697,13 +696,12 @@ pub fn start_notes_watcher(app_handle: tauri::AppHandle, app_data_dir: PathBuf, 
 // ── Helpers for row → public structs ─────────────────────────────────────────
 
 fn row_to_list_item(row: NoteRow, tags: Vec<NoteTagInfo>, has_draft: bool) -> NoteListItem {
+    let bindings: Vec<String> = serde_json::from_str(&row.bindings).unwrap_or_default();
     NoteListItem {
         id: row.id,
         title: row.title,
         format: row.format,
-        scope: row.scope,
-        workspace_id: row.workspace_id,
-        profile_id: row.profile_id,
+        bindings,
         tags,
         pinned: row.pinned != 0,
         archived: row.archived != 0,
@@ -759,14 +757,9 @@ pub async fn note_list(
         .filter(|r| {
             if !include_deleted && r.deleted != 0 { return false; }
             if !include_archived && r.archived != 0 { return false; }
-            if let Some(ref scope) = filter.scope {
-                if &r.scope != scope { return false; }
-            }
-            if let Some(ref ws_id) = filter.workspace_id {
-                if r.workspace_id.as_deref() != Some(ws_id.as_str()) { return false; }
-            }
-            if let Some(ref p_id) = filter.profile_id {
-                if r.profile_id.as_deref() != Some(p_id.as_str()) { return false; }
+            if let Some(ref binding) = filter.binding {
+                let bindings: Vec<String> = serde_json::from_str(&r.bindings).unwrap_or_default();
+                if !bindings.contains(binding) { return false; }
             }
             if let Some(pinned) = filter.pinned {
                 if (r.pinned != 0) != pinned { return false; }
@@ -815,14 +808,14 @@ pub async fn note_get(
 
     let has_draft = draft_file_path(&state.app_data_dir, &id).exists();
 
+    let bindings: Vec<String> = serde_json::from_str(&row.bindings).unwrap_or_default();
+
     Ok(Note {
         id: row.id,
         title: row.title,
         file_path: row.file_path,
         format: row.format,
-        scope: row.scope,
-        workspace_id: row.workspace_id,
-        profile_id: row.profile_id,
+        bindings,
         tags,
         pinned: row.pinned != 0,
         archived: row.archived != 0,
@@ -843,8 +836,9 @@ pub async fn note_create(
     let now = Utc::now().to_rfc3339();
     let id = Uuid::new_v4().to_string();
     let format = input.format.as_deref().unwrap_or("md").to_string();
-    let scope = input.scope.as_deref().unwrap_or("global").to_string();
     let content = input.content.as_deref().unwrap_or("").to_string();
+    let bindings_vec = input.bindings.clone().unwrap_or_default();
+    let bindings_json = serde_json::to_string(&bindings_vec).map_err(AppError::other)?;
 
     let custom_dir = state.notes_custom_dir.read().ok().and_then(|g| g.clone());
     let docs_dir = effective_docs_dir(&state.app_data_dir, custom_dir.as_ref());
@@ -856,9 +850,9 @@ pub async fn note_create(
         title: input.title.clone(),
         file_path: stored_path.clone(),
         format: format.clone(),
-        scope: scope.clone(),
-        workspace_id: input.workspace_id.clone(),
-        profile_id: input.profile_id.clone(),
+        scope: "global".to_string(),
+        workspace_id: None,
+        profile_id: None,
         pinned: 0,
         archived: 0,
         deleted: 0,
@@ -870,6 +864,7 @@ pub async fn note_create(
         file_mtime: None,
         content_hash: None,
         preview: String::new(),
+        bindings: bindings_json.clone(),
     };
 
     let tag_names = input.tag_names.clone().unwrap_or_default();
@@ -879,16 +874,14 @@ pub async fn note_create(
     let preview = make_preview(&content);
 
     sqlx::query(
-        "INSERT INTO notes (id, title, file_path, format, scope, workspace_id, profile_id, pinned, archived, deleted, doc_status, created_at, updated_at, content_hash, preview)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 'active', ?, ?, ?, ?)",
+        "INSERT INTO notes (id, title, file_path, format, bindings, pinned, archived, deleted, doc_status, created_at, updated_at, content_hash, preview)
+         VALUES (?, ?, ?, ?, ?, 0, 0, 0, 'active', ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&input.title)
     .bind(&stored_path)
     .bind(&format)
-    .bind(&scope)
-    .bind(&input.workspace_id)
-    .bind(&input.profile_id)
+    .bind(&bindings_json)
     .bind(&now)
     .bind(&now)
     .bind(&content_hash)
@@ -920,9 +913,7 @@ pub async fn note_create(
         title: input.title,
         file_path: stored_path,
         format,
-        scope,
-        workspace_id: input.workspace_id,
-        profile_id: input.profile_id,
+        bindings: bindings_vec,
         tags,
         pinned: false,
         archived: false,
@@ -1005,14 +996,14 @@ pub async fn note_update(
 
     let tags = fetch_note_tags(&id, &state.db).await?;
 
+    let bindings: Vec<String> = serde_json::from_str(&row.bindings).unwrap_or_default();
+
     Ok(Note {
         id: row.id,
         title: row.title,
         file_path: row.file_path,
         format: row.format,
-        scope: row.scope,
-        workspace_id: row.workspace_id,
-        profile_id: row.profile_id,
+        bindings,
         tags,
         pinned: row.pinned != 0,
         archived: row.archived != 0,
@@ -1200,14 +1191,9 @@ pub async fn note_search(
     let items = rows
         .into_iter()
         .filter(|r| {
-            if let Some(ref scope) = filter.scope {
-                if &r.scope != scope { return false; }
-            }
-            if let Some(ref ws_id) = filter.workspace_id {
-                if r.workspace_id.as_deref() != Some(ws_id.as_str()) { return false; }
-            }
-            if let Some(ref p_id) = filter.profile_id {
-                if r.profile_id.as_deref() != Some(p_id.as_str()) { return false; }
+            if let Some(ref binding) = filter.binding {
+                let bindings: Vec<String> = serde_json::from_str(&r.bindings).unwrap_or_default();
+                if !bindings.contains(binding) { return false; }
             }
             true
         })

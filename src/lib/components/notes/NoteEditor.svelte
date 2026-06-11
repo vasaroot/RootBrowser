@@ -39,6 +39,10 @@
     showDeleteConfirm = false;
   }
 
+  function onTitleChange() {
+    notesStore.onTitleChange(titleValue);
+  }
+
   function onBodyChange() {
     notesStore.onContentChange(contentValue);
   }
@@ -125,8 +129,8 @@
     <div class="editor-footer">
       <span class="footer-meta">
         {note.format.toUpperCase()}
-        {#if note.scope !== 'global'}
-          · {note.scope}
+        {#if note.bindings.length > 0}
+          · {note.bindings.some(b => b.startsWith('profile:')) ? 'profile' : 'workspace'}
         {/if}
       </span>
       <div class="footer-actions">
@@ -322,8 +326,6 @@
     text-align: center;
   }
   .tb-btn:hover { background: var(--bg-3); color: var(--text-1); }
-  .tb-btn b, .tb-btn i, .tb-btn u, .tb-btn s { font-size: 0.82rem; }
-  .tb-btn code { font-size: 0.75rem; font-family: monospace; }
   .tb-sep {
     width: 1px;
     height: 1.1rem;
@@ -431,7 +433,6 @@
     color: var(--text-2);
     line-height: 1.5;
   }
-  .delete-warn strong { color: #ef4444; }
   .delete-actions {
     display: flex;
     gap: 0.5rem;

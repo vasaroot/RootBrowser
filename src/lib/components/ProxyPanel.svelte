@@ -35,7 +35,7 @@
     country: proxy?.country ?? null,
     city: proxy?.city ?? null,
     private_key: proxy?.private_key ?? null,
-    workspace_id: workspaceId ?? undefined,
+    tags: proxy ? proxy.tags : (workspaceId ? [`workspace:${workspaceId}`] : []),
   })));
 
   async function submit() {

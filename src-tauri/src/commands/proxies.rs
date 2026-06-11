@@ -29,12 +29,11 @@ pub async fn proxy_create(
 ) -> CmdResult<Proxy> {
     let id = Uuid::new_v4().to_string();
     let now = Utc::now();
-
-    let workspace_id = req.workspace_id.as_deref().unwrap_or("default");
+    let tags_json = serde_json::to_string(&req.tags.unwrap_or_default()).map_err(AppError::other)?;
 
     sqlx::query(
         "INSERT INTO proxies
-        (id, name, proxy_type, host, port, username, password, country, city, status, workspace_id, private_key, created_at)
+        (id, name, proxy_type, host, port, username, password, country, city, status, tags, private_key, created_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
     )
     .bind(&id)
@@ -47,7 +46,7 @@ pub async fn proxy_create(
     .bind(&req.country)
     .bind(&req.city)
     .bind("unknown")
-    .bind(workspace_id)
+    .bind(&tags_json)
     .bind(&req.private_key)
     .bind(now.to_rfc3339())
     .execute(&state.db)
@@ -65,10 +64,12 @@ pub async fn proxy_update(
     req: CreateProxyRequest,
     state: tauri::State<'_, AppState>,
 ) -> CmdResult<Proxy> {
+    let tags_json = serde_json::to_string(&req.tags.unwrap_or_default()).map_err(AppError::other)?;
+
     sqlx::query(
         "UPDATE proxies SET
             name = ?, proxy_type = ?, host = ?, port = ?,
-            username = ?, password = ?, country = ?, city = ?, private_key = ?
+            username = ?, password = ?, country = ?, city = ?, private_key = ?, tags = ?
         WHERE id = ?",
     )
     .bind(&req.name)
@@ -80,6 +81,7 @@ pub async fn proxy_update(
     .bind(&req.country)
     .bind(&req.city)
     .bind(&req.private_key)
+    .bind(&tags_json)
     .bind(&id)
     .execute(&state.db)
     .await

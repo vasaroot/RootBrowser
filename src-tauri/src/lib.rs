@@ -28,7 +28,7 @@ use commands::proxies::*;
 use commands::ssh::{
     ssh_connect, ssh_connection_create, ssh_connection_delete, ssh_connection_get,
     ssh_connection_list, ssh_connection_update, ssh_disconnect, ssh_resize, ssh_send_data,
-    ssh_session_list, ssh_session_remove, SshSessions,
+    ssh_session_list, ssh_session_remove, ssh_respond_prompt, SshSessions,
 };
 use commands::workspaces::*;
 use sqlx::{Pool, Sqlite};
@@ -123,7 +123,6 @@ pub fn run() {
             workspace_delete,
             workspace_stats,
             profiles_list_by_workspace,
-            proxies_list_by_workspace,
             workspace_column_list,
             workspace_column_create,
             workspace_column_update,
@@ -192,6 +191,7 @@ pub fn run() {
             ssh_resize,
             ssh_session_list,
             ssh_session_remove,
+            ssh_respond_prompt,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

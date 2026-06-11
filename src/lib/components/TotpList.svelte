@@ -265,8 +265,6 @@
     text-align: center;
   }
 
-  .code-value.muted { color: var(--text-3); }
-
   .entry-actions {
     display: flex;
     gap: 0.25rem;

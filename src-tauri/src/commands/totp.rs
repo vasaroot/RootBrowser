@@ -135,7 +135,7 @@ fn decode_secret(s: &str) -> Result<Vec<u8>, AppError> {
     Err(AppError::other("Could not decode TOTP secret"))
 }
 
-fn build_totp(entry: &TotpEntry) -> Result<TOTP, AppError> {
+pub(crate) fn build_totp(entry: &TotpEntry) -> Result<TOTP, AppError> {
     let secret = decode_secret(&entry.secret)?;
 
     TOTP::new(

@@ -5,7 +5,7 @@
   import { workspacesStore } from '$lib/store/workspaces.svelte';
   import { profilesStore } from '$lib/store/profiles.svelte';
   import { api } from '$lib/api';
-  import type { NoteCreateInput, NoteFilter, NoteScope } from '$lib/types';
+  import type { NoteCreateInput, NoteFilter } from '$lib/types';
   import Icon from '$lib/Icon.svelte';
   import NotesList from './NotesList.svelte';
   import NoteEditor from './NoteEditor.svelte';
@@ -57,12 +57,19 @@
     }
   });
 
-  // Build NoteFilter from activeFilter state
+  function hasBinding(bindings: string[], b: string): boolean {
+    return bindings.includes(b);
+  }
+
+  function isGlobal(bindings: string[]): boolean {
+    return !bindings.some(b => b.startsWith('workspace:') || b.startsWith('profile:'));
+  }
+
+  // Build NoteFilter from activeFilter state (used for search)
   const noteFilter = $derived.by((): NoteFilter => {
     switch (activeFilter.type) {
-      case 'global': return { scope: 'global' };
-      case 'workspace': return { workspace_id: activeFilter.id };
-      case 'profile': return { profile_id: activeFilter.id, scope: 'profile' };
+      case 'workspace': return { binding: `workspace:${activeFilter.id}` };
+      case 'profile': return { binding: `profile:${activeFilter.id}` };
       case 'tag': return { tag_name: activeFilter.id };
       case 'pinned': return { pinned: true };
       case 'archived': return { archived: true, include_deleted: false };
@@ -76,9 +83,9 @@
 
     // Apply activeFilter
     if (activeFilter.type !== 'all') {
-      if (activeFilter.type === 'global') list = list.filter((n) => n.scope === 'global' && !n.archived);
-      else if (activeFilter.type === 'workspace') list = list.filter((n) => n.workspace_id === activeFilter.id && !n.archived);
-      else if (activeFilter.type === 'profile') list = list.filter((n) => n.profile_id === activeFilter.id && !n.archived);
+      if (activeFilter.type === 'global') list = list.filter((n) => isGlobal(n.bindings) && !n.archived);
+      else if (activeFilter.type === 'workspace') list = list.filter((n) => hasBinding(n.bindings, `workspace:${activeFilter.id}`) && !n.archived);
+      else if (activeFilter.type === 'profile') list = list.filter((n) => hasBinding(n.bindings, `profile:${activeFilter.id}`) && !n.archived);
       else if (activeFilter.type === 'tag') list = list.filter((n) => n.tags.some((t) => t.name === activeFilter.id) && !n.archived);
       else if (activeFilter.type === 'pinned') list = list.filter((n) => n.pinned && !n.archived);
       else if (activeFilter.type === 'archived') list = list.filter((n) => n.archived);
@@ -131,34 +138,26 @@
   async function createNote() {
     if (!createTitle.trim()) return;
 
-    // Determine scope from active filter first, fallback to context prop
-    let scope: NoteScope = 'global';
-    let create_workspace_id: string | undefined;
-    let create_profile_id: string | undefined;
+    // Build bindings from active filter first, fallback to context prop
+    const bindings: string[] = [];
 
     if (activeFilter.type === 'workspace' && activeFilter.id) {
-      scope = 'workspace';
-      create_workspace_id = activeFilter.id;
+      bindings.push(`workspace:${activeFilter.id}`);
     } else if (activeFilter.type === 'profile' && activeFilter.id) {
-      scope = 'profile';
-      create_profile_id = activeFilter.id;
-      create_workspace_id = workspaceId;
+      bindings.push(`profile:${activeFilter.id}`);
+      if (workspaceId) bindings.push(`workspace:${workspaceId}`);
     } else if (context === 'workspace' && contextId) {
-      scope = 'workspace';
-      create_workspace_id = contextId;
+      bindings.push(`workspace:${contextId}`);
     } else if (context === 'profile' && contextId) {
-      scope = 'profile';
-      create_profile_id = contextId;
-      create_workspace_id = workspaceId;
+      bindings.push(`profile:${contextId}`);
+      if (workspaceId) bindings.push(`workspace:${workspaceId}`);
     }
-    // 'global', 'all', 'pinned', 'archived' → scope stays 'global'
+    // 'global', 'all', 'pinned', 'archived' → no bindings (global note)
 
     const input: NoteCreateInput = {
       title: createTitle.trim(),
       format: createFormat,
-      scope,
-      workspace_id: create_workspace_id,
-      profile_id: create_profile_id,
+      bindings,
     };
 
     try {
@@ -522,11 +521,6 @@
   }
 
   .create-title:focus { outline: none; border-color: var(--accent); }
-
-  .create-row {
-    display: flex;
-    gap: 0.5rem;
-  }
 
   .create-actions {
     display: flex;

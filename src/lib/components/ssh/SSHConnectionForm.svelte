@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { api } from '$lib/api';
-  import type { SshConnection, SshConnectionCreateInput, SshConnectionUpdateInput } from '$lib/types';
+  import type { SshConnection, SshConnectionCreateInput, SshConnectionUpdateInput, TotpEntry } from '$lib/types';
   import Icon from '$lib/Icon.svelte';
   import { t } from '$lib/i18n';
 
@@ -23,6 +23,7 @@
 
   let proxies = $state<{ id: string; name: string; proxy_type: string }[]>([]);
   let workspaces = $state<{ id: string; name: string }[]>([]);
+  let totpEntries = $state<TotpEntry[]>([]);
   let saving = $state(false);
   let error = $state('');
 
@@ -35,6 +36,7 @@
   let privateKey = $state(untrack(() => connection?.private_key ?? ''));
   let keyPassphrase = $state(untrack(() => connection?.key_passphrase ?? ''));
   let requires2fa = $state(untrack(() => connection?.requires_2fa ?? false));
+  let totpEntryId = $state(untrack(() => connection?.totp_entry_id ?? ''));
   let proxyId = $state(untrack(() => connection?.proxy_id ?? ''));
   let selectedWorkspaceIds = $state<string[]>(
     untrack(() => connection?.workspace_ids ?? (defaultWorkspaceId ? [defaultWorkspaceId] : []))
@@ -53,6 +55,9 @@
     });
     api.workspaces.list().then((list) => {
       workspaces = list.map((w) => ({ id: w.id, name: w.name }));
+    });
+    api.totp.list().then((list) => {
+      totpEntries = list;
     });
   });
 
@@ -83,6 +88,7 @@
         private_key: privateKey || null,
         key_passphrase: keyPassphrase || null,
         requires_2fa: requires2fa,
+        totp_entry_id: totpEntryId || null,
         proxy_id: proxyId || null,
         workspace_ids: selectedWorkspaceIds,
         profile_ids: selectedProfileIds,
@@ -112,30 +118,30 @@
 
   <div class="form-row">
     <div class="form-group" style="flex: 3">
-      <label>{$t('ssh_field_name')}</label>
-      <input type="text" bind:value={name} placeholder={$t('ssh_field_name_placeholder')} />
+      <label for="ssh-name">{$t('ssh_field_name')}</label>
+      <input id="ssh-name" type="text" bind:value={name} placeholder={$t('ssh_field_name_placeholder')} />
     </div>
   </div>
 
   <div class="form-row">
     <div class="form-group" style="flex: 3">
-      <label>{$t('ssh_field_host')}</label>
-      <input type="text" bind:value={host} placeholder={$t('ssh_field_host_placeholder')} />
+      <label for="ssh-host">{$t('ssh_field_host')}</label>
+      <input id="ssh-host" type="text" bind:value={host} placeholder={$t('ssh_field_host_placeholder')} />
     </div>
     <div class="form-group" style="flex: 1">
-      <label>{$t('ssh_field_port')}</label>
-      <input type="number" bind:value={port} min="1" max="65535" />
+      <label for="ssh-port">{$t('ssh_field_port')}</label>
+      <input id="ssh-port" type="number" bind:value={port} min="1" max="65535" />
     </div>
   </div>
 
   <div class="form-group">
-    <label>{$t('ssh_field_username')}</label>
-    <input type="text" bind:value={username} placeholder={$t('ssh_field_username_placeholder')} />
+    <label for="ssh-username">{$t('ssh_field_username')}</label>
+    <input id="ssh-username" type="text" bind:value={username} placeholder={$t('ssh_field_username_placeholder')} />
   </div>
 
   <div class="form-group">
-    <label>{$t('ssh_field_auth_type')}</label>
-    <select bind:value={authType}>
+    <label for="ssh-auth-type">{$t('ssh_field_auth_type')}</label>
+    <select id="ssh-auth-type" bind:value={authType}>
       <option value="password">{$t('ssh_auth_password')}</option>
       <option value="key">{$t('ssh_auth_key')}</option>
       <option value="key_password">{$t('ssh_auth_key_password')}</option>
@@ -144,22 +150,26 @@
 
   {#if authType === 'password'}
     <div class="form-group">
-      <label>{$t('ssh_field_password')}</label>
-      <input type="password" bind:value={password} placeholder="••••••••" autocomplete="new-password" />
+      <label for="ssh-password">{$t('ssh_field_password')}</label>
+      <input id="ssh-password" type="password" bind:value={password} placeholder="••••••••" autocomplete="new-password" />
     </div>
   {/if}
 
   {#if authType === 'key' || authType === 'key_password'}
     <div class="form-group">
-      <label>{$t('ssh_field_private_key')}</label>
-      <textarea bind:value={privateKey} rows="5" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;..."></textarea>
+      <label for="ssh-private-key">{$t('ssh_field_private_key')}</label>
+      <textarea id="ssh-private-key" bind:value={privateKey} rows="5" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;..."></textarea>
     </div>
     {#if authType === 'key_password'}
       <div class="form-group">
-        <label>{$t('ssh_field_key_passphrase')}</label>
-        <input type="password" bind:value={keyPassphrase} placeholder="••••••••" autocomplete="new-password" />
+        <label for="ssh-key-passphrase">{$t('ssh_field_key_passphrase')}</label>
+        <input id="ssh-key-passphrase" type="password" bind:value={keyPassphrase} placeholder="••••••••" autocomplete="new-password" />
       </div>
     {/if}
+    <div class="form-group">
+      <label for="ssh-password-ki">{$t('ssh_field_password_ki')}</label>
+      <input id="ssh-password-ki" type="password" bind:value={password} placeholder={$t('ssh_field_password_ki_placeholder')} autocomplete="new-password" />
+    </div>
   {/if}
 
   <div class="toggle-row">
@@ -178,9 +188,28 @@
     </button>
   </div>
 
+  {#if requires2fa}
+    <div class="form-group">
+      <label for="ssh-totp-entry">{$t('ssh_field_totp_entry')}</label>
+      <select id="ssh-totp-entry" bind:value={totpEntryId}>
+        <option value="">{$t('ssh_totp_entry_interactive')}</option>
+        {#each totpEntries as entry}
+          <option value={entry.id}>{entry.name} ({entry.issuer ?? entry.account})</option>
+        {/each}
+      </select>
+      <span class="hint">
+        {#if totpEntryId}
+          {$t('ssh_totp_entry_hint_auto')}
+        {:else}
+          {$t('ssh_totp_entry_hint_interactive')}
+        {/if}
+      </span>
+    </div>
+  {/if}
+
   <div class="form-group">
-    <label>{$t('ssh_field_proxy')}</label>
-    <select bind:value={proxyId}>
+    <label for="ssh-proxy">{$t('ssh_field_proxy')}</label>
+    <select id="ssh-proxy" bind:value={proxyId}>
       <option value="">{$t('ssh_proxy_none')}</option>
       {#each proxies as p}
         <option value={p.id}>[{p.proxy_type}] {p.name}</option>
@@ -191,7 +220,7 @@
   <!-- Workspace assignments -->
   {#if workspaces.length > 0}
     <div class="form-group">
-      <label>{$t('ssh_field_workspaces')}</label>
+      <span class="field-label">{$t('ssh_field_workspaces')}</span>
       <div class="tag-grid">
         {#each workspaces as ws}
           <button
@@ -216,22 +245,22 @@
     <div class="advanced-body">
       <div class="form-row">
         <div class="form-group">
-          <label>{$t('ssh_field_connect_timeout')}</label>
-          <input type="number" bind:value={connectTimeout} min="1" max="120" />
+          <label for="ssh-connect-timeout">{$t('ssh_field_connect_timeout')}</label>
+          <input id="ssh-connect-timeout" type="number" bind:value={connectTimeout} min="1" max="120" />
         </div>
         <div class="form-group">
-          <label>{$t('ssh_field_keepalive')}</label>
-          <input type="number" bind:value={keepalive} min="0" max="300" />
+          <label for="ssh-keepalive">{$t('ssh_field_keepalive')}</label>
+          <input id="ssh-keepalive" type="number" bind:value={keepalive} min="0" max="300" />
         </div>
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>{$t('ssh_field_default_cols')}</label>
-          <input type="number" bind:value={defaultCols} min="40" max="500" />
+          <label for="ssh-default-cols">{$t('ssh_field_default_cols')}</label>
+          <input id="ssh-default-cols" type="number" bind:value={defaultCols} min="40" max="500" />
         </div>
         <div class="form-group">
-          <label>{$t('ssh_field_default_rows')}</label>
-          <input type="number" bind:value={defaultRows} min="10" max="200" />
+          <label for="ssh-default-rows">{$t('ssh_field_default_rows')}</label>
+          <input id="ssh-default-rows" type="number" bind:value={defaultRows} min="10" max="200" />
         </div>
       </div>
     </div>
@@ -250,7 +279,7 @@
   .form { display: flex; flex-direction: column; gap: 0.75rem; }
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
   .form-group { display: flex; flex-direction: column; gap: 0.3rem; }
-  label { font-size: 0.75rem; text-transform: uppercase; color: var(--text-2); font-weight: 500; }
+  label, .field-label { font-size: 0.75rem; text-transform: uppercase; color: var(--text-2); font-weight: 500; }
   input, select, textarea {
     background: var(--bg-2);
     border: 1px solid var(--border);

@@ -4,6 +4,7 @@
   export interface SelectOption {
     label: string;
     value: string | null | undefined;
+    disabled?: boolean;
   }
 
   interface Props {
@@ -32,6 +33,7 @@
   }
 
   function select(opt: SelectOption) {
+    if (opt.disabled) return;
     value = opt.value;
     onchange?.(opt.value);
     open = false;
@@ -106,8 +108,10 @@
         type="button"
         class="option"
         class:selected={opt.value === value}
+        class:separator={opt.disabled}
         role="option"
         aria-selected={opt.value === value}
+        aria-disabled={opt.disabled}
         onclick={() => select(opt)}
       >
         {opt.label}
@@ -186,4 +190,11 @@
   }
   .option:hover { background: var(--surface-2); }
   .option.selected { background: var(--accent-bg); color: var(--accent); }
+  .option.separator {
+    color: var(--text-2);
+    font-size: 0.75rem;
+    cursor: default;
+    padding: 0.2rem 0.65rem;
+  }
+  .option.separator:hover { background: transparent; }
 </style>

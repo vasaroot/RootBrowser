@@ -29,8 +29,6 @@
   let showAll = $state(false);
   let connecting = $state<string | null>(null);
   let connectError = $state('');
-  let totpCode = $state('');
-  let showTotpPrompt = $state<{ conn: SshConnection } | null>(null);
   let workspaceNames = $state<Record<string, string>>({});
 
   onMount(() => {
@@ -88,20 +86,10 @@
   }
 
   async function handleConnect(conn: SshConnection) {
-    if (conn.requires_2fa) {
-      showTotpPrompt = { conn };
-      return;
-    }
-    await doConnect(conn, undefined);
-  }
-
-  async function doConnect(conn: SshConnection, code: string | undefined) {
     connecting = conn.id;
     connectError = '';
-    showTotpPrompt = null;
-    totpCode = '';
     try {
-      await sshStore.connect(conn.id, code);
+      await sshStore.connect(conn.id);
       open = false;
     } catch (e: unknown) {
       connectError = String(e);
@@ -173,29 +161,6 @@
         {:else}
           {#if connectError}
             <div class="error-msg">{connectError}</div>
-          {/if}
-
-          {#if showTotpPrompt}
-            <div class="totp-prompt">
-              <p>{$t('ssh_totp_prompt')} <strong>{showTotpPrompt.conn.name}</strong></p>
-              <!-- svelte-ignore a11y_autofocus -->
-              <input
-                type="text"
-                bind:value={totpCode}
-                placeholder={$t('ssh_totp_placeholder')}
-                autofocus
-                maxlength="8"
-                onkeydown={(e) => e.key === 'Enter' && showTotpPrompt && doConnect(showTotpPrompt.conn, totpCode)}
-              />
-              <div class="totp-actions">
-                <button class="btn-ghost btn-sm" onclick={() => { showTotpPrompt = null; totpCode = ''; }}>{$t('ssh_btn_cancel')}</button>
-                <button
-                  class="btn-primary btn-sm"
-                  onclick={() => showTotpPrompt && doConnect(showTotpPrompt.conn, totpCode)}
-                  disabled={!totpCode.trim()}
-                >{$t('ssh_btn_connect')}</button>
-              </div>
-            </div>
           {/if}
 
           <div class="list-header">
@@ -302,25 +267,4 @@
     padding: 0.4rem 0.6rem;
     font-size: 0.82rem;
   }
-  .totp-prompt {
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 0.75rem 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-  .totp-prompt p { margin: 0; font-size: 0.85rem; color: var(--text); }
-  .totp-prompt input {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--text);
-    padding: 0.4rem 0.6rem;
-    font-size: 1rem;
-    letter-spacing: 0.15em;
-    text-align: center;
-  }
-  .totp-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
 </style>

@@ -18,3 +18,16 @@ TMP/
 .cursor/
 .vscode/
 docs/
+
+# Sensitive / accidental secrets — never commit these
+*.env
+*.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal

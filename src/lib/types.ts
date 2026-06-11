@@ -131,7 +131,7 @@ export interface Proxy {
   status: 'unknown' | 'active' | 'failed';
   last_ip: string | null;
   last_check_at: string | null;
-  workspace_id: string | null;
+  tags: string[];
   private_key: string | null;
   server_fingerprint: string | null;
   created_at: string;
@@ -142,7 +142,7 @@ export interface CreateProxyRequest {
   proxy_type: string;
   host: string;
   port: number;
-  workspace_id?: string;
+  tags?: string[];
   username?: string | null;
   password?: string | null;
   country?: string | null;
@@ -252,7 +252,6 @@ export interface TotpUpdateRequest {
 
 // ── Notes ─────────────────────────────────────────────────────────────────────
 
-export type NoteScope = 'global' | 'workspace' | 'profile';
 export type NoteFormat = 'md' | 'txt' | 'py' | string;
 export type NoteDocStatus = 'active' | 'orphan' | 'missing';
 export type SaveStatus = 'saved' | 'saving' | 'unsaved' | 'failed' | 'external';
@@ -275,9 +274,8 @@ export interface NoteListItem {
   id: string;
   title: string;
   format: NoteFormat;
-  scope: NoteScope;
-  workspace_id: string | null;
-  profile_id: string | null;
+  /** Context bindings, e.g. ["workspace:id", "profile:id"] */
+  bindings: string[];
   tags: NoteTagInfo[];
   pinned: boolean;
   archived: boolean;
@@ -297,9 +295,8 @@ export interface Note extends NoteListItem {
 export interface NoteCreateInput {
   title: string;
   format?: NoteFormat;
-  scope?: NoteScope;
-  workspace_id?: string | null;
-  profile_id?: string | null;
+  /** Context bindings, e.g. ["workspace:id", "profile:id"] */
+  bindings?: string[];
   tag_names?: string[];
   content?: string;
 }
@@ -311,9 +308,8 @@ export interface NoteUpdateInput {
 }
 
 export interface NoteFilter {
-  scope?: NoteScope;
-  workspace_id?: string;
-  profile_id?: string;
+  /** Filter notes that contain this binding, e.g. "workspace:id" or "profile:id" */
+  binding?: string;
   tag_name?: string;
   pinned?: boolean;
   archived?: boolean;

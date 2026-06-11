@@ -4509,7 +4509,7 @@ dependencies = [
 
 [[package]]
 name = "rootbrowser"
-version = "0.2.1"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "async-trait",

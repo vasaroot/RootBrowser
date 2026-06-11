@@ -180,8 +180,9 @@ async fn create_profile_from_export(
     let proxy_id: Option<String> = if let Some(proxy_data) = &export.proxy {
         let pid = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
+        let tags_json = format!("[\"workspace:{}\"]", workspace_id);
         sqlx::query(
-            "INSERT INTO proxies (id, name, proxy_type, host, port, username, password, country, city, status, workspace_id, created_at)
+            "INSERT INTO proxies (id, name, proxy_type, host, port, username, password, country, city, status, tags, created_at)
              VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         )
         .bind(&pid)
@@ -194,7 +195,7 @@ async fn create_profile_from_export(
         .bind(&proxy_data.country)
         .bind(&proxy_data.city)
         .bind("unknown")
-        .bind(&workspace_id)
+        .bind(&tags_json)
         .bind(&now)
         .execute(&state.db)
         .await

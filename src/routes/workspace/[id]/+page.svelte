@@ -477,7 +477,7 @@
 {#if showCreatePanel}
   <CreateProfilePanel
     {workspaceId}
-    {proxies}
+    proxies={proxiesStore.list}
     onclose={() => (showCreatePanel = false)}
     oncreated={() => { showCreatePanel = false; onProfileChange(); }}
   />
@@ -493,7 +493,7 @@
 {#if selectedProfile}
   <ProfileSidePanel
     profile={selectedProfile}
-    proxy={proxies.find((p) => p.id === selectedProfile?.proxy_id) ?? null}
+    proxy={proxiesStore.list.find((p) => p.id === selectedProfile?.proxy_id) ?? null}
     {workspaceId}
     {columns}
     isRunning={isSelectedRunning}
@@ -526,7 +526,7 @@
 {#if editingProfile}
   <EditProfilePanel
     profile={editingProfile}
-    {proxies}
+    proxies={proxiesStore.list}
     onclose={() => (editingProfile = null)}
     onsaved={(updated) => {
       profilesStore.list = profilesStore.list.map((p) => p.id === updated.id ? updated : p);

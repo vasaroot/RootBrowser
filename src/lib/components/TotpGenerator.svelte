@@ -160,6 +160,7 @@
 
 {#if showAdd}
   <TotpAddModal
+    initialTags={context === 'workspace' && contextId ? [`workspace:${contextId}`] : []}
     onclose={() => (showAdd = false)}
   />
 {/if}

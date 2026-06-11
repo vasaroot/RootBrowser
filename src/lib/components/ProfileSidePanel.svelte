@@ -39,7 +39,7 @@
 
   const profileNotes = $derived(
     notesStore.list
-      .filter((n) => n.profile_id === profile.id && !n.archived)
+      .filter((n) => n.bindings.includes(`profile:${profile.id}`) && !n.archived)
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
   );
 
@@ -443,12 +443,6 @@
 />
 
 <style>
-  .ssh-inline {
-    padding: 0.75rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
   .notes-inline {
     display: flex;
     flex-direction: column;
@@ -567,24 +561,6 @@
     font-size: 0.62rem;
     color: var(--text-2);
   }
-  .note-meta-inline {
-    font-size: 0.7rem;
-    color: var(--text-2);
-  }
-
-  .notes-hint {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 2.5rem 1rem;
-    color: var(--text-2);
-    font-size: 0.85rem;
-    text-align: center;
-  }
-
-  .notes-hint p { margin: 0; }
-
   .btn-open-notes {
     display: flex;
     align-items: center;

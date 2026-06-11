@@ -15,14 +15,16 @@
   let { notes, activeId, onselect, oncreate, workspaceName, profileName }: Props = $props();
 
   function scopeLabel(n: NoteListItem): string {
-    if (n.scope === 'profile' && n.profile_id && profileName) return profileName(n.profile_id);
-    if (n.scope === 'workspace' && n.workspace_id && workspaceName) return workspaceName(n.workspace_id);
+    const profileTag = n.bindings.find(b => b.startsWith('profile:'));
+    if (profileTag && profileName) return profileName(profileTag.slice('profile:'.length));
+    const wsTag = n.bindings.find(b => b.startsWith('workspace:'));
+    if (wsTag && workspaceName) return workspaceName(wsTag.slice('workspace:'.length));
     return $t('notes_scope_global');
   }
 
-  function scopeColor(scope: string): string {
-    if (scope === 'profile') return 'var(--accent)';
-    if (scope === 'workspace') return 'var(--success)';
+  function scopeColor(n: NoteListItem): string {
+    if (n.bindings.some(b => b.startsWith('profile:'))) return 'var(--accent)';
+    if (n.bindings.some(b => b.startsWith('workspace:'))) return 'var(--success)';
     return 'var(--text-2)';
   }
 
@@ -72,7 +74,7 @@
         </div>
 
         <div class="card-mid">
-          <span class="scope-badge" style="color: {scopeColor(note.scope)}">
+          <span class="scope-badge" style="color: {scopeColor(note)}">
             {scopeLabel(note)}
           </span>
           <span class="note-time">{relativeTime(note.updated_at)}</span>
