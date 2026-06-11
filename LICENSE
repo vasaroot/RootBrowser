@@ -1,0 +1,181 @@
+ROOT BROWSER COMMUNITY LICENSE
+Version 1.0
+
+Copyright (c) 2026 Root Browser Project
+
+1. DEFINITIONS
+
+"Software" means the Root Browser software and all associated source code,
+documentation, assets, build scripts, and related materials made available
+by the Licensor, in source or binary form.
+
+"Licensor" means the Root Browser Project, represented by the copyright
+holders of the Software.
+
+"You" (or "Your") means an individual or legal entity exercising rights
+under this License.
+
+"Internal Use" means use of the Software by You or within Your organization
+for Your own benefit, where the Software is not sold, sublicensed,
+distributed, or made available to third parties in any form, including as a
+hosted or managed service.
+
+"Commercial Use" means any use of the Software intended for or directed
+toward commercial advantage or monetary compensation, including but not
+limited to: (a) selling the Software or access to it; (b) selling services
+based primarily on the Software; (c) operating the Software as part of a
+revenue-generating service offered to third parties; (d) integrating the
+Software into a commercial product or commercial offering distributed or
+provided to third parties. Internal Use within a commercial organization is
+NOT Commercial Use for the purposes of this License.
+
+"Contribution" means any work of authorship intentionally submitted to the
+Licensor for inclusion in the Software, including via pull requests,
+patches, issues, or other communication channels.
+
+"Official Distribution Channels" means the source code repositories,
+websites, and download locations operated or designated by the Licensor.
+
+2. GRANT OF RIGHTS
+
+Subject to Your compliance with this License, the Licensor grants You a
+non-exclusive, worldwide, non-transferable, non-sublicensable license to:
+
+(a) access, view, and study the source code of the Software;
+
+(b) compile, build, and run the Software;
+
+(c) modify the Software for Your own Internal Use;
+
+(d) use the Software for personal, educational, research, testing,
+    evaluation, and Internal Use purposes, including Internal Use within
+    a business or other organization;
+
+(e) create a publicly accessible fork of the official source code
+    repository solely for the purpose of preparing and submitting
+    Contributions to the Licensor, provided such fork retains this License
+    and all notices, and is not promoted or distributed as an independent
+    or alternative product;
+
+(f) refer or link others to the Official Distribution Channels.
+
+This License remains in effect until terminated under Section 9.
+
+3. RESTRICTIONS
+
+Except as expressly permitted in Section 2, and without prior written
+permission from the Licensor, You may NOT:
+
+(a) sell, sublicense, lease, rent, distribute, publish, or otherwise make
+    the Software, in source or binary form, modified or unmodified,
+    available to any third party; distribution is permitted ONLY by
+    referring third parties to the Official Distribution Channels;
+
+(b) sell or distribute modified versions or derivative works of the
+    Software, including compiled builds;
+
+(c) provide the Software, or any substantial portion of it, to third
+    parties as a hosted service, cloud service, SaaS offering, managed
+    platform, or any similar service, whether or not a fee is charged;
+
+(d) use the Software, its source code, architecture, or substantial
+    components, or derivative works thereof, to develop, market,
+    distribute, or operate a competing browser, anti-detect browser,
+    browser profile management platform, browser automation platform,
+    account management platform, or substantially similar product or
+    service;
+
+(e) remove, alter, or obscure copyright notices, license notices,
+    trademarks, branding, or attribution notices contained in the Software;
+
+(f) use the Software in a manner that falsely implies endorsement,
+    partnership, sponsorship, or affiliation with the Licensor;
+
+(g) redistribute or relicense the Software, in whole or in part, under any
+    other license.
+
+4. COMMERCIAL USE
+
+Commercial Use of the Software is prohibited unless expressly authorized in
+writing by the Licensor. The Licensor may offer separate commercial
+licenses under different terms at its sole discretion.
+
+5. CONTRIBUTIONS
+
+Unless otherwise agreed in writing, by submitting a Contribution You grant
+the Licensor a perpetual, worldwide, irrevocable, royalty-free,
+sublicensable license to use, reproduce, modify, distribute, publicly
+display, publicly perform, sublicense, and relicense Your Contribution as
+part of the Software or otherwise, and You represent that You have the
+right to grant this license.
+
+6. THIRD-PARTY COMPONENTS
+
+The Software includes or depends upon third-party open-source components
+that are licensed under their own terms (including, without limitation,
+MIT, Apache-2.0, BSD, ISC, Zlib, and MPL-2.0 licenses). Such components
+remain subject to their respective licenses, and nothing in this License
+restricts Your rights under those licenses with respect to those
+components. Corresponding notices must be preserved.
+
+7. OWNERSHIP
+
+The Software is licensed, not sold. All rights, title, and interest in and
+to the Software remain the exclusive property of the Licensor. No rights
+are granted except those expressly stated in this License.
+
+8. TRADEMARKS
+
+This License does not grant any rights to use the names "Root Browser" or
+"RootBrowser", or any associated logos, icons, graphics, branding elements,
+domain names, or trademarks, except as required to identify the unmodified
+Software as obtained from the Official Distribution Channels. Any other use
+of such marks requires separate written permission from the Licensor.
+
+9. TERMINATION
+
+This License terminates automatically and immediately if You violate any
+provision of this License. Upon termination, You must immediately cease all
+use and distribution of the Software and destroy all copies under Your
+control. Sections 5 through 12 survive termination. The Licensor's right to
+seek remedies for violations is not waived by termination.
+
+10. DISCLAIMER OF WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. YOU BEAR THE ENTIRE
+RISK AS TO THE QUALITY AND PERFORMANCE OF THE SOFTWARE.
+
+11. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL THE
+LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN
+CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH
+THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+12. GENERAL
+
+(a) Governing Law. This License shall be governed by and interpreted in
+    accordance with the laws of the Russian Federation, without regard to
+    its conflict-of-law rules.
+
+(b) Severability. If any provision of this License is held to be invalid
+    or unenforceable, that provision shall be enforced to the maximum
+    extent permissible, and the remaining provisions shall remain in full
+    force and effect.
+
+(c) No Waiver. Failure by the Licensor to enforce any provision of this
+    License shall not constitute a waiver of future enforcement of that or
+    any other provision.
+
+(d) Entire Agreement. This License constitutes the entire agreement
+    between the parties with respect to the Software, unless a separate
+    written agreement (such as a commercial license) is executed with the
+    Licensor.
+
+13. ACCEPTANCE
+
+By using, modifying, copying, building, or accessing the Software, You
+agree to be bound by the terms of this License. If You do not agree, You
+must not use the Software.

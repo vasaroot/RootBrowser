@@ -1,0 +1,103 @@
+<script lang="ts">
+  interface Props {
+    open: boolean;
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    variant?: 'danger' | 'primary';
+    onconfirm: () => void;
+    oncancel: () => void;
+  }
+
+  let {
+    open,
+    title,
+    message,
+    confirmLabel = 'OK',
+    cancelLabel = 'Cancel',
+    variant = 'danger',
+    onconfirm,
+    oncancel,
+  }: Props = $props();
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && open) oncancel();
+  }
+</script>
+
+<svelte:window onkeydown={handleKeydown} />
+
+{#if open}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+  <div class="overlay" onclick={oncancel} onkeydown={(e) => e.key === 'Enter' && oncancel()} role="presentation" tabindex="-1">
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+    <div
+      class="modal"
+      onclick={(e) => e.stopPropagation()}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+      tabindex="-1"
+    >
+      <p id="modal-title" class="modal-title">{title}</p>
+      <p class="modal-message">{message}</p>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick={oncancel}>{cancelLabel}</button>
+        <button
+          class="btn"
+          class:btn-danger={variant === 'danger'}
+          class:btn-primary={variant === 'primary'}
+          onclick={onconfirm}
+        >
+          {confirmLabel}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<style>
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    backdrop-filter: blur(2px);
+  }
+
+  .modal {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    box-shadow: var(--shadow-lg);
+    max-width: 400px;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+  }
+
+  .modal-title {
+    font-size: 0.975rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .modal-message {
+    font-size: 0.875rem;
+    color: var(--text-2);
+    line-height: 1.5;
+  }
+
+  .modal-footer {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    padding-top: 0.25rem;
+  }
+</style>
