@@ -2,7 +2,7 @@
 
 **Desktop antidetect Firefox profile manager powered by [Camoufox](https://github.com/daijro/camoufox)**
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Community%20License%201.0-blue.svg)](LICENSE)
 [![Tauri](https://img.shields.io/badge/Tauri-2.x-orange)](https://tauri.app)
 [![Svelte](https://img.shields.io/badge/Svelte-5-red)](https://svelte.dev)
 [![Rust](https://img.shields.io/badge/Rust-2021-orange)](https://www.rust-lang.org)
@@ -63,6 +63,16 @@ Organize profiles into **workspaces**, attach **proxies**, and track status on a
 - HTTP / HTTPS / SOCKS5 support
 - Per-profile and per-workspace proxy assignment
 - Proxy checker via ip-api.com (IP, country, city)
+
+### SSH
+- Manage SSH connections in a dedicated panel
+- SSH tunnel as a proxy for any profile (local port forwarding)
+- Built-in terminal per SSH session
+- Key-based and password authentication
+
+### Notes
+- Built-in notes panel per workspace
+- Markdown rendering support
 
 ### Import / Export
 - Export profiles to JSON or ZIP (with proxy, passwords, Firefox profile files)
@@ -140,10 +150,10 @@ RootBrowser/
 │       ├── proxies/            # Proxy management
 │       ├── settings/           # App settings
 │       └── workspace/[id]/     # Workspace + Kanban
-└── src-tauri/                  # Rust/Tauri backend
+    └── src-tauri/                  # Rust/Tauri backend
     └── src/
         ├── browser/            # Camoufox launch, user.js generation
-        ├── commands/           # Tauri commands (profiles, proxies, workspaces)
+        ├── commands/           # Tauri commands (profiles, proxies, workspaces, ssh)
         ├── proxy/              # Proxy checker
         ├── db.rs               # SQLite migrations
         └── fingerprint.rs      # Fingerprint presets
@@ -153,7 +163,9 @@ RootBrowser/
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE).
+Licensed under the [Root Browser Community License 1.0](LICENSE).
+
+Personal, educational, research, and internal business use is free. Commercial use, redistribution, and SaaS deployments require written permission from the Licensor.
 
 ---
 
