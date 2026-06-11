@@ -1,6 +1,6 @@
 [package]
 name = "rootbrowser"
-version = "0.2.1"
+version = "1.0.1"
 description = "Firefox Profile Manager"
 authors = ["you"]
 edition = "2021"
