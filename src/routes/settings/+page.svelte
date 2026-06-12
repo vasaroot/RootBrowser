@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { locale, t } from '$lib/i18n';
   import { theme, toggleTheme } from '$lib/theme';
+  import { inspectorApp } from '$lib/inspector/inspector.svelte';
   import Icon from '$lib/Icon.svelte';
   import { api } from '$lib/api';
   import type { Locale } from '$lib/i18n';
@@ -308,6 +309,24 @@
     </div>
   </div>
 
+  <!-- Developer Tools -->
+  <div class="card">
+    <div class="card-title">{$t('inspector_developer_tools')}</div>
+    <div class="dev-tools-row">
+      <div class="dev-tools-info">
+        <span>{$t('inspector_toggle')}</span>
+        <span class="muted">{$t('inspector_hotkey_hint')}</span>
+      </div>
+      <button
+        class="toggle-btn"
+        class:active={inspectorApp.enabled}
+        onclick={() => inspectorApp.toggle()}
+      >
+        {inspectorApp.enabled ? 'ON' : 'OFF'}
+      </button>
+    </div>
+  </div>
+
   <!-- Notes -->
   <div class="card">
     <div class="card-title">{$t('settings_notes_section')}</div>
@@ -416,6 +435,42 @@
   .lang-flag { font-size: 1.05rem; }
   .lang-native { flex: 1; }
   .lang-check { color: var(--accent); font-weight: 700; }
+
+  .dev-tools-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .dev-tools-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    font-size: 0.875rem;
+    color: var(--text);
+  }
+
+  .toggle-btn {
+    padding: 0.3rem 0.9rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    min-width: 52px;
+  }
+
+  .toggle-btn:hover { border-color: var(--border-2); color: var(--text); }
+
+  .toggle-btn.active {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+    color: var(--accent);
+  }
 
   .theme-options { display: flex; gap: 0.625rem; }
 

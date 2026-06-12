@@ -317,9 +317,6 @@
         <button class="tab" class:active={tab === 'topology'} onclick={() => (tab = 'topology')}>
           <Icon name="git-fork" size={14} />{$t('workspace_tab_topology')}
         </button>
-        <button class="tab" class:active={tab === 'notes'} onclick={() => (tab = 'notes')}>
-          <Icon name="file-text" size={14} />{$t('workspace_tab_notes')}
-        </button>
       </div>
 
       <div class="view-switcher" class:hidden={tab !== 'board'}>

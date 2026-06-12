@@ -1,7 +1,6 @@
 <script lang="ts">
   import { sshStore } from '$lib/store/ssh.svelte';
   import Icon from '$lib/Icon.svelte';
-  import SSHTerminal from './SSHTerminal.svelte';
   import { t } from '$lib/i18n';
 
   let activeTerminalId = $derived(sshStore.activeTerminalId);
@@ -41,16 +40,6 @@
   </div>
 {/if}
 
-<!-- Keep all terminals mounted — only toggle visibility to avoid xterm rerender -->
-{#each sshStore.sessions as s (s.session_id)}
-  <SSHTerminal
-    sessionId={s.session_id}
-    visible={activeTerminalId === s.session_id}
-    onMinimize={() => setActive(null)}
-    onDisconnect={() => setActive(null)}
-  />
-{/each}
-
 <style>
   .ssh-bar {
     display: flex;
@@ -61,6 +50,7 @@
     border-top: 1px solid var(--border);
     overflow-x: auto;
     flex-shrink: 0;
+    height: 36px;
   }
   .ssh-label {
     display: flex;

@@ -9,24 +9,30 @@
   import type { Profile } from '$lib/types';
   import PasswordGenerator from '$lib/components/PasswordGenerator.svelte';
   import TotpGenerator from '$lib/components/TotpGenerator.svelte';
-  import NotesPanel from '$lib/components/notes/NotesPanel.svelte';
-  import SSHPanel from '$lib/components/ssh/SSHPanel.svelte';
   import SSHSessionBar from '$lib/components/ssh/SSHSessionBar.svelte';
+  import SSHTerminal from '$lib/components/ssh/SSHTerminal.svelte';
   import { sshStore } from '$lib/store/ssh.svelte';
   import { totpStore } from '$lib/store/totp.svelte';
   import { listen } from '@tauri-apps/api/event';
   import { profilesStore } from '$lib/store/profiles.svelte';
+  import UIInspector from '$lib/inspector/UIInspector.svelte';
+  import { inspectorApp } from '$lib/inspector/inspector.svelte';
 
   let { children }: { children: Snippet } = $props();
 
   let runningIds = $state<string[]>([]);
   let pwgenOpen = $state(false);
   let totpOpen = $state(false);
-  let notesOpen = $state(false);
-  let sshOpen = $state(false);
 
   let runningProfiles = $derived(
     profilesStore.list.filter((p) => runningIds.includes(p.id))
+  );
+
+  // Terminal bottom offset = all in-flow elements below it
+  const ITEM_H = 36;
+  let terminalBottom = $derived(
+    ITEM_H + // SSH session bar (when sessions exist — terminal only shows when sessions exist)
+    (runningProfiles.length > 0 ? ITEM_H : 0) // dock
   );
 
   async function refreshRunning() {
@@ -36,6 +42,11 @@
   }
 
   function handleKeyBack(e: KeyboardEvent) {
+    if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+      e.preventDefault();
+      inspectorApp.toggle();
+      return;
+    }
     if (e.altKey && e.key === 'ArrowLeft') {
       e.preventDefault();
       window.history.back();
@@ -107,6 +118,10 @@
         <Icon name="globe" size={14} />
         {$t('nav_proxies')}
       </a>
+      <a href="/terminal" class="nav-link" class:active={isActive('/terminal')}>
+        <Icon name="terminal" size={14} />
+        {$t('nav_terminal')}
+      </a>
       <a href="/notes" class="nav-link" class:active={isActive('/notes')}>
         <Icon name="file-text" size={14} />
         {$t('nav_notes')}
@@ -120,12 +135,6 @@
     <div class="topbar-right">
       <button class="theme-toggle" onclick={() => (totpOpen = !totpOpen)} title={$t('totp_title')}>
         <Icon name="shield" size={14} />
-      </button>
-      <button class="theme-toggle" onclick={() => (notesOpen = !notesOpen)} title="Notes">
-        <Icon name="file-text" size={14} />
-      </button>
-      <button class="theme-toggle" onclick={() => (sshOpen = !sshOpen)} title={$t('ssh_title')}>
-        <Icon name="terminal" size={14} />
       </button>
       <button class="theme-toggle" onclick={() => (pwgenOpen = !pwgenOpen)} title={$t('pwgen_title')}>
         <Icon name="key" size={14} />
@@ -144,6 +153,20 @@
     {@render children()}
   </main>
 
+  <!-- Slot clips terminal animation — overflow:hidden prevents sliding through dock/session bar -->
+  <div class="ssh-terminal-slot" style="bottom:{terminalBottom}px">
+    {#each sshStore.sessions as s (s.session_id)}
+      <SSHTerminal
+        sessionId={s.session_id}
+        visible={sshStore.activeTerminalId === s.session_id}
+        bottomOffset={terminalBottom}
+        onMinimize={() => { sshStore.activeTerminalId = null; }}
+        onDisconnect={() => { sshStore.activeTerminalId = null; }}
+      />
+    {/each}
+  </div>
+  <SSHSessionBar />
+  <!-- Dock is last in DOM — at the very bottom below the SSH bar -->
   {#if runningProfiles.length > 0}
     <div class="dock">
       <span class="dock-label">
@@ -160,14 +183,11 @@
       </div>
     </div>
   {/if}
-
-  <SSHSessionBar />
 </div>
 
 <PasswordGenerator bind:open={pwgenOpen} />
 <TotpGenerator bind:open={totpOpen} context="global" />
-<NotesPanel bind:open={notesOpen} context="global" />
-<SSHPanel bind:open={sshOpen} context="global" />
+<UIInspector />
 
 <style>
   /* ── CSS Variables ── */
@@ -432,6 +452,18 @@
     padding: 1.5rem 1.75rem;
     background: var(--bg);
     min-height: 0;
+  }
+
+  /* ── SSH Terminal Slot ── */
+  .ssh-terminal-slot {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 44px;
+    /* bottom is set via inline style = terminalBottom */
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 50;
   }
 
   /* ── Dock ── */

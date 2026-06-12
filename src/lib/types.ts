@@ -286,7 +286,7 @@ export interface NoteListItem {
   /** Context bindings, e.g. ["workspace:id", "profile:id"] */
   bindings: string[];
   tags: NoteTagInfo[];
-  folder_id: string | null;
+  folder_ids: string[];
   pinned: boolean;
   archived: boolean;
   doc_status: NoteDocStatus;

@@ -63,7 +63,7 @@ pub struct NoteListItem {
     pub format: String,
     pub bindings: Vec<String>,
     pub tags: Vec<NoteTagInfo>,
-    pub folder_id: Option<String>,
+    pub folder_ids: Vec<String>,
     pub pinned: bool,
     pub archived: bool,
     pub doc_status: String,
@@ -326,6 +326,23 @@ async fn fetch_all_note_tags_map(
             name: tag_name,
             color: tag_color,
         });
+    }
+    Ok(map)
+}
+
+async fn fetch_all_note_folder_ids_map(
+    db: &sqlx::Pool<sqlx::Sqlite>,
+) -> Result<HashMap<String, Vec<String>>, AppError> {
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT note_id, folder_id FROM note_folder_links",
+    )
+    .fetch_all(db)
+    .await
+    .map_err(AppError::db)?;
+
+    let mut map: HashMap<String, Vec<String>> = HashMap::new();
+    for (note_id, folder_id) in rows {
+        map.entry(note_id).or_default().push(folder_id);
     }
     Ok(map)
 }
@@ -707,7 +724,7 @@ pub fn start_notes_watcher(app_handle: tauri::AppHandle, app_data_dir: PathBuf, 
 
 // ── Helpers for row → public structs ─────────────────────────────────────────
 
-fn row_to_list_item(row: NoteRow, tags: Vec<NoteTagInfo>, has_draft: bool) -> NoteListItem {
+fn row_to_list_item(row: NoteRow, tags: Vec<NoteTagInfo>, folder_ids: Vec<String>, has_draft: bool) -> NoteListItem {
     let bindings: Vec<String> = serde_json::from_str(&row.bindings).unwrap_or_default();
     NoteListItem {
         id: row.id,
@@ -715,7 +732,7 @@ fn row_to_list_item(row: NoteRow, tags: Vec<NoteTagInfo>, has_draft: bool) -> No
         format: row.format,
         bindings,
         tags,
-        folder_id: row.folder_id,
+        folder_ids,
         pinned: row.pinned != 0,
         archived: row.archived != 0,
         doc_status: row.doc_status,
@@ -763,6 +780,7 @@ pub async fn note_list(
     .map_err(AppError::db)?;
 
     let tags_map = fetch_all_note_tags_map(&state.db).await?;
+    let folder_ids_map = fetch_all_note_folder_ids_map(&state.db).await?;
     let drafts_dir = drafts_dir(&state.app_data_dir);
 
     let items: Vec<NoteListItem> = rows
@@ -780,7 +798,6 @@ pub async fn note_list(
             true
         })
         .filter(|r| {
-            // Tag filter
             if let Some(ref tag_name) = filter.tag_name {
                 let tags = tags_map.get(&r.id);
                 return tags.map(|v| v.iter().any(|t| &t.name == tag_name)).unwrap_or(false);
@@ -789,8 +806,9 @@ pub async fn note_list(
         })
         .map(|r| {
             let tags = tags_map.get(&r.id).cloned().unwrap_or_default();
+            let folder_ids = folder_ids_map.get(&r.id).cloned().unwrap_or_default();
             let has_draft = drafts_dir.join(format!("{}.draft", r.id)).exists();
-            row_to_list_item(r, tags, has_draft)
+            row_to_list_item(r, tags, folder_ids, has_draft)
         })
         .collect();
 
@@ -1200,6 +1218,7 @@ pub async fn note_search(
 
     let rows = q.fetch_all(&state.db).await.map_err(AppError::db)?;
     let tags_map = fetch_all_note_tags_map(&state.db).await?;
+    let folder_ids_map = fetch_all_note_folder_ids_map(&state.db).await?;
     let drafts_dir = drafts_dir(&state.app_data_dir);
 
     let items = rows
@@ -1213,8 +1232,9 @@ pub async fn note_search(
         })
         .map(|r| {
             let tags = tags_map.get(&r.id).cloned().unwrap_or_default();
+            let folder_ids = folder_ids_map.get(&r.id).cloned().unwrap_or_default();
             let has_draft = drafts_dir.join(format!("{}.draft", r.id)).exists();
-            row_to_list_item(r, tags, has_draft)
+            row_to_list_item(r, tags, folder_ids, has_draft)
         })
         .collect();
 
@@ -1523,8 +1543,7 @@ pub async fn note_folder_delete(
     .map_err(AppError::db)?;
 
     for (fid,) in &descendants {
-        // Detach notes from this folder
-        sqlx::query("UPDATE notes SET folder_id = NULL WHERE folder_id = ?")
+        sqlx::query("DELETE FROM note_folder_links WHERE folder_id = ?")
             .bind(fid)
             .execute(&state.db)
             .await
@@ -1545,16 +1564,87 @@ pub async fn note_folder_delete(
 }
 
 #[tauri::command]
-pub async fn note_set_folder(
+pub async fn note_add_binding(
     note_id: String,
-    folder_id: Option<String>,
+    binding: String,
     state: tauri::State<'_, AppState>,
 ) -> CmdResult<()> {
-    let now = Utc::now().to_rfc3339();
-    sqlx::query("UPDATE notes SET folder_id = ?, updated_at = ? WHERE id = ?")
-        .bind(&folder_id)
+    let row: Option<(String,)> = sqlx::query_as("SELECT bindings FROM notes WHERE id = ?")
+        .bind(&note_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(AppError::db)?;
+
+    let Some((bindings_json,)) = row else { return Ok(()); };
+    let mut bindings: Vec<String> = serde_json::from_str(&bindings_json).unwrap_or_default();
+    if !bindings.contains(&binding) {
+        bindings.push(binding);
+        let new_json = serde_json::to_string(&bindings).map_err(AppError::other)?;
+        let now = chrono::Utc::now().to_rfc3339();
+        sqlx::query("UPDATE notes SET bindings = ?, updated_at = ? WHERE id = ?")
+            .bind(&new_json)
+            .bind(&now)
+            .bind(&note_id)
+            .execute(&state.db)
+            .await
+            .map_err(AppError::db)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn note_remove_binding(
+    note_id: String,
+    binding: String,
+    state: tauri::State<'_, AppState>,
+) -> CmdResult<()> {
+    let row: Option<(String,)> = sqlx::query_as("SELECT bindings FROM notes WHERE id = ?")
+        .bind(&note_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(AppError::db)?;
+
+    let Some((bindings_json,)) = row else { return Ok(()); };
+    let mut bindings: Vec<String> = serde_json::from_str(&bindings_json).unwrap_or_default();
+    bindings.retain(|b| b != &binding);
+    let new_json = serde_json::to_string(&bindings).map_err(AppError::other)?;
+    let now = chrono::Utc::now().to_rfc3339();
+    sqlx::query("UPDATE notes SET bindings = ?, updated_at = ? WHERE id = ?")
+        .bind(&new_json)
         .bind(&now)
         .bind(&note_id)
+        .execute(&state.db)
+        .await
+        .map_err(AppError::db)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn note_add_folder(
+    note_id: String,
+    folder_id: String,
+    state: tauri::State<'_, AppState>,
+) -> CmdResult<()> {
+    sqlx::query(
+        "INSERT OR IGNORE INTO note_folder_links (note_id, folder_id) VALUES (?, ?)",
+    )
+    .bind(&note_id)
+    .bind(&folder_id)
+    .execute(&state.db)
+    .await
+    .map_err(AppError::db)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn note_remove_folder(
+    note_id: String,
+    folder_id: String,
+    state: tauri::State<'_, AppState>,
+) -> CmdResult<()> {
+    sqlx::query("DELETE FROM note_folder_links WHERE note_id = ? AND folder_id = ?")
+        .bind(&note_id)
+        .bind(&folder_id)
         .execute(&state.db)
         .await
         .map_err(AppError::db)?;

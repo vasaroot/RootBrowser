@@ -25,11 +25,12 @@
   interface Props {
     sessionId: string;
     visible?: boolean;
+    bottomOffset?: number;
     onMinimize?: () => void;
     onDisconnect?: () => void;
   }
 
-  let { sessionId, visible = true, onMinimize, onDisconnect }: Props = $props();
+  let { sessionId, visible = true, bottomOffset = 36, onMinimize, onDisconnect }: Props = $props();
 
   let termEl = $state<HTMLDivElement | undefined>(undefined);
   let term: Terminal | null = null;
@@ -44,7 +45,6 @@
   let promptSubmitting = $state(false);
 
   // Drawer size state
-  const SESSION_BAR_H = 34;
   const DEFAULT_VH = 45;
   let drawerVh = $state(DEFAULT_VH);
   let isMaximized = $state(false);
@@ -62,7 +62,7 @@
     e.preventDefault();
 
     function onMove(ev: MouseEvent) {
-      const newHeight = window.innerHeight - ev.clientY - SESSION_BAR_H;
+      const newHeight = window.innerHeight - ev.clientY - bottomOffset;
       const vh = Math.max(20, Math.min(90, (newHeight / window.innerHeight) * 100));
       drawerVh = vh;
     }
@@ -300,11 +300,12 @@
 
 <style>
   .terminal-drawer {
-    position: fixed;
+    position: absolute;
     left: 0;
     right: 0;
-    bottom: 2.1rem;
-    z-index: 300;
+    bottom: 0;
+    pointer-events: auto;
+    z-index: 0;
     display: flex;
     flex-direction: column;
     transform: translateY(0);

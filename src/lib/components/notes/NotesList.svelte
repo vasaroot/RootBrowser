@@ -10,21 +10,50 @@
     oncreate: () => void;
     workspaceName?: (id: string) => string;
     profileName?: (id: string) => string;
+    folderName?: (id: string) => string;
+    folderColor?: (id: string) => string;
   }
 
-  let { notes, activeId, onselect, oncreate, workspaceName, profileName }: Props = $props();
+  let { notes, activeId, onselect, oncreate, workspaceName, profileName, folderName, folderColor }: Props = $props();
 
   function scopeLabel(n: NoteListItem): string {
-    const profileTag = n.bindings.find(b => b.startsWith('profile:'));
-    if (profileTag && profileName) return profileName(profileTag.slice('profile:'.length));
+    // Folders first — original context
+    if (n.folder_ids.length > 0 && folderName) {
+      return n.folder_ids.length === 1
+        ? folderName(n.folder_ids[0])
+        : `${folderName(n.folder_ids[0])} +${n.folder_ids.length - 1}`;
+    }
     const wsTag = n.bindings.find(b => b.startsWith('workspace:'));
     if (wsTag && workspaceName) return workspaceName(wsTag.slice('workspace:'.length));
+    const profileTag = n.bindings.find(b => b.startsWith('profile:'));
+    if (profileTag && profileName) return profileName(profileTag.slice('profile:'.length));
     return $t('notes_scope_global');
   }
 
+  function cardChips(n: NoteListItem) {
+    const chips: { label: string; color: string }[] = [];
+    for (const fid of n.folder_ids) {
+      const label = folderName?.(fid) ?? fid;
+      const color = folderColor?.(fid) ?? 'var(--text-2)';
+      chips.push({ label, color });
+    }
+    for (const b of n.bindings) {
+      if (b.startsWith('workspace:')) {
+        const name = workspaceName?.(b.slice('workspace:'.length));
+        if (name) chips.push({ label: name, color: 'var(--success)' });
+      } else if (b.startsWith('profile:')) {
+        const name = profileName?.(b.slice('profile:'.length));
+        if (name) chips.push({ label: name, color: 'var(--accent)' });
+      }
+    }
+    for (const t of n.tags) chips.push({ label: t.name, color: t.color });
+    return chips;
+  }
+
   function scopeColor(n: NoteListItem): string {
-    if (n.bindings.some(b => b.startsWith('profile:'))) return 'var(--accent)';
+    if (n.folder_ids.length > 0 && folderColor) return folderColor(n.folder_ids[0]);
     if (n.bindings.some(b => b.startsWith('workspace:'))) return 'var(--success)';
+    if (n.bindings.some(b => b.startsWith('profile:'))) return 'var(--accent)';
     return 'var(--text-2)';
   }
 
@@ -84,15 +113,15 @@
           <p class="note-preview">{note.preview}</p>
         {/if}
 
-        {#if note.tags.length > 0}
+        {#if cardChips(note).length > 0}
           <div class="card-tags">
-            {#each note.tags.slice(0, 4) as tag (tag.id)}
-              <span class="tag-chip" style="border-color:{tag.color}; color:{tag.color}; background:{tag.color}18">
-                {tag.name}
+            {#each cardChips(note).slice(-3) as chip, i (i)}
+              <span class="tag-chip" style="border-color:{chip.color}; color:{chip.color}; background:{chip.color}18">
+                {chip.label}
               </span>
             {/each}
-            {#if note.tags.length > 4}
-              <span class="tag-more">+{note.tags.length - 4}</span>
+            {#if cardChips(note).length > 3}
+              <span class="tag-more">+{cardChips(note).length - 3}</span>
             {/if}
           </div>
         {/if}

@@ -1,16 +1,30 @@
 <script lang="ts">
-  import type { NoteTag, NoteTagInfo } from '$lib/types';
+  import type { NoteTag, NoteTagInfo, NoteFolder, Workspace, Profile } from '$lib/types';
   import { api } from '$lib/api';
   import Icon from '$lib/Icon.svelte';
   import { t } from '$lib/i18n';
+
+  interface ContextChip {
+    label: string;
+    color: string;
+    onremove?: () => void;
+  }
 
   interface Props {
     selectedTags: NoteTagInfo[];
     allTags: NoteTag[];
     onchange: (tagNames: string[]) => void;
+    contextChips?: ContextChip[];
+    folders?: NoteFolder[];
+    activeFolderIds?: string[];
+    onaddFolder?: (folderId: string) => void;
+    workspaces?: Workspace[];
+    profiles?: Profile[];
+    activeBindings?: string[];
+    onaddBinding?: (binding: string) => void;
   }
 
-  let { selectedTags, allTags, onchange }: Props = $props();
+  let { selectedTags, allTags, onchange, contextChips = [], folders = [], activeFolderIds = [], onaddFolder, workspaces = [], profiles = [], activeBindings = [], onaddBinding }: Props = $props();
 
   const TAG_COLORS = [
     '#6366f1', '#3b82f6', '#06b6d4', '#10b981',
@@ -29,6 +43,30 @@
     allTags
       .filter((t) => !selectedNames.has(t.name) && t.name.toLowerCase().includes(inputValue.toLowerCase()))
       .slice(0, 6)
+  );
+
+  const folderSuggestions = $derived(
+    inputValue.trim().length > 0
+      ? folders
+          .filter(f => !activeFolderIds.includes(f.id) && f.name.toLowerCase().includes(inputValue.toLowerCase()))
+          .slice(0, 4)
+      : []
+  );
+
+  const workspaceSuggestions = $derived(
+    inputValue.trim().length > 0
+      ? workspaces
+          .filter(w => !activeBindings.includes(`workspace:${w.id}`) && w.name.toLowerCase().includes(inputValue.toLowerCase()))
+          .slice(0, 3)
+      : []
+  );
+
+  const profileSuggestions = $derived(
+    inputValue.trim().length > 0
+      ? profiles
+          .filter(p => !activeBindings.includes(`profile:${p.id}`) && p.name.toLowerCase().includes(inputValue.toLowerCase()))
+          .slice(0, 3)
+      : []
   );
 
   const isNew = $derived(
@@ -80,6 +118,15 @@
 <svelte:window onclick={onOutsideClick} />
 
 <div class="tags-wrap" bind:this={wrapEl}>
+  {#each contextChips as chip}
+    <span class="chip chip-context" style="border-color:{chip.color}22;color:{chip.color};background:{chip.color}18">
+      {chip.label}
+      {#if chip.onremove}
+        <button class="chip-x" onclick={chip.onremove}>×</button>
+      {/if}
+    </span>
+  {/each}
+
   {#each selectedTags as tag (tag.id)}
     <span class="chip" style="border-color:{tag.color};color:{tag.color};background:{tag.color}18">
       {tag.name}
@@ -103,12 +150,33 @@
           onkeydown={onKeydown}
         />
 
-        {#if suggestions.length > 0}
+        {#if suggestions.length > 0 || folderSuggestions.length > 0 || workspaceSuggestions.length > 0 || profileSuggestions.length > 0}
           <div class="suggestions">
             {#each suggestions as s (s.id)}
               <button class="sug-item" onmousedown={(e) => { e.preventDefault(); void addTag(s.name); }}>
                 <span class="sug-dot" style="background:{s.color}"></span>
                 {s.name}
+              </button>
+            {/each}
+            {#each folderSuggestions as f (f.id)}
+              <button class="sug-item" onmousedown={(e) => { e.preventDefault(); onaddFolder?.(f.id); close(); }}>
+                <span class="sug-dot" style="background:{f.color}"></span>
+                {f.name}
+                <span class="sug-folder-label">папка</span>
+              </button>
+            {/each}
+            {#each workspaceSuggestions as w (w.id)}
+              <button class="sug-item" onmousedown={(e) => { e.preventDefault(); onaddBinding?.(`workspace:${w.id}`); close(); }}>
+                <span class="sug-dot" style="background:{w.color}"></span>
+                {w.name}
+                <span class="sug-folder-label">воркспейс</span>
+              </button>
+            {/each}
+            {#each profileSuggestions as p (p.id)}
+              <button class="sug-item" onmousedown={(e) => { e.preventDefault(); onaddBinding?.(`profile:${p.id}`); close(); }}>
+                <span class="sug-dot" style="background:var(--accent)"></span>
+                {p.name}
+                <span class="sug-folder-label">профиль</span>
               </button>
             {/each}
           </div>
@@ -157,13 +225,19 @@
   .chip {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 0.2rem;
     font-size: 0.72rem;
-    padding: 0.1rem 0.4rem;
+    line-height: 1;
+    padding: 0.2rem 0.45rem;
     border-radius: 999px;
     border: 1px solid;
     font-weight: 500;
     white-space: nowrap;
+  }
+
+  .chip-context {
+    opacity: 0.9;
   }
 
   .chip-x {
@@ -250,6 +324,13 @@
     transition: background 0.1s;
   }
   .sug-item:hover { background: var(--surface); }
+
+  .sug-folder-label {
+    margin-left: auto;
+    font-size: 0.68rem;
+    color: var(--text-3);
+    flex-shrink: 0;
+  }
 
   .sug-dot {
     width: 8px;

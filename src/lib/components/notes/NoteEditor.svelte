@@ -1,5 +1,7 @@
 <script lang="ts">
   import { notesStore } from '$lib/store/notes.svelte';
+  import { workspacesStore } from '$lib/store/workspaces.svelte';
+  import { profilesStore } from '$lib/store/profiles.svelte';
   import { api } from '$lib/api';
   import type { NoteTag, NoteFolder } from '$lib/types';
   import Icon from '$lib/Icon.svelte';
@@ -34,11 +36,48 @@
 
   let titleHovered = $state(false);
   let showDeleteConfirm = $state(false);
-  let folderPickerOpen = $state(false);
 
-  const activeFolder = $derived(
-    note ? folders.find(f => f.id === note.folder_id) ?? null : null
-  );
+  const contextChips = $derived.by(() => {
+    if (!note) return [];
+    const chips: { label: string; color: string; onremove?: () => void }[] = [];
+
+    // Folders first — they represent the original context
+    const folderIds = notesStore.list.find(n => n.id === note.id)?.folder_ids ?? [];
+    for (const fid of folderIds) {
+      const folder = folders.find(f => f.id === fid);
+      if (folder) {
+        chips.push({
+          label: folder.name,
+          color: folder.color,
+          onremove: () => notesStore.removeNoteFolder(note!.id, fid),
+        });
+      }
+    }
+
+    for (const b of note.bindings) {
+      if (b.startsWith('workspace:')) {
+        const ws = workspacesStore.list.find(w => w.id === b.slice('workspace:'.length));
+        if (ws) chips.push({ label: ws.name, color: ws.color, onremove: () => notesStore.removeNoteBinding(note!.id, b) });
+      } else if (b.startsWith('profile:')) {
+        const pr = profilesStore.list.find(p => p.id === b.slice('profile:'.length));
+        if (pr) chips.push({ label: pr.name, color: 'var(--accent)', onremove: () => notesStore.removeNoteBinding(note!.id, b) });
+      }
+    }
+
+    return chips;
+  });
+
+  function formatUpdatedAt(iso: string): string {
+    const d = new Date(iso);
+    const now = new Date();
+    const diff = now.getTime() - d.getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return $t('notes_time_just_now');
+    if (m < 60) return $t('notes_time_m_ago', { m: String(m) });
+    const h = Math.floor(m / 60);
+    if (h < 24) return $t('notes_time_h_ago', { h: String(h) });
+    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+  }
 
   async function confirmDelete() {
     if (!note) return;
@@ -54,20 +93,20 @@
     notesStore.onContentChange(contentValue);
   }
 
-  const saveLabel = $derived<Record<string, string>>({
+  const saveLabel: Record<string, string> = {
     saved: $t('note_status_saved'),
     saving: $t('note_status_saving'),
     unsaved: $t('note_status_unsaved'),
     failed: $t('note_status_error'),
     external: $t('note_status_external'),
-  });
+  };
 
-  const saveClass: Record<string, string> = {
-    saved: 'status-saved',
-    saving: 'status-saving',
-    unsaved: 'status-unsaved',
-    failed: 'status-failed',
-    external: 'status-external',
+  const saveIcon: Record<string, string> = {
+    saved: 'check-circle',
+    saving: 'loader',
+    unsaved: 'circle',
+    failed: 'alert-circle',
+    external: 'alert-triangle',
   };
 </script>
 
@@ -122,55 +161,25 @@
         selectedTags={note.tags}
         {allTags}
         onchange={(tagNames) => notesStore.setTags(note!.id, tagNames)}
+        {contextChips}
+        {folders}
+        activeFolderIds={notesStore.list.find(n => n.id === note.id)?.folder_ids ?? []}
+        onaddFolder={(folderId) => notesStore.addNoteFolder(note!.id, folderId)}
+        workspaces={workspacesStore.list}
+        profiles={profilesStore.list}
+        activeBindings={note.bindings}
+        onaddBinding={(binding) => notesStore.addNoteBinding(note!.id, binding)}
       />
-      <!-- Folder picker -->
-      <div class="folder-picker-wrap">
-        <button
-          class="folder-badge"
-          class:active={!!activeFolder}
-          onclick={() => folderPickerOpen = !folderPickerOpen}
-          title="Папка"
+      <div class="header-right">
+        <span class="updated-at">{formatUpdatedAt(note.updated_at)}</span>
+        <span
+          class="save-status-icon status-{saveStatus}"
+          title={saveLabel[saveStatus] ?? $t('note_status_saved')}
+          class:spinning={saveStatus === 'saving'}
         >
-          <Icon name="folder" size={12} />
-          {#if activeFolder}
-            <span class="folder-badge-name">{activeFolder.name}</span>
-            <span
-              class="folder-badge-dot"
-              style="background:{activeFolder.color}"
-            ></span>
-          {/if}
-        </button>
-        {#if folderPickerOpen}
-          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-          <div class="folder-dropdown-overlay" onclick={() => folderPickerOpen = false} role="presentation"></div>
-          <div class="folder-dropdown">
-            <button
-              class="folder-option"
-              class:selected={!note.folder_id}
-              onclick={() => { void notesStore.setNoteFolder(note!.id, null); folderPickerOpen = false; }}
-            >
-              <Icon name="x" size={11} />
-              <span>Без папки</span>
-            </button>
-            {#each folders as f (f.id)}
-              <button
-                class="folder-option"
-                class:selected={note.folder_id === f.id}
-                onclick={() => { void notesStore.setNoteFolder(note!.id, f.id); folderPickerOpen = false; }}
-              >
-                <span class="folder-opt-dot" style="background:{f.color}"></span>
-                <span>{f.name}</span>
-              </button>
-            {/each}
-            {#if folders.length === 0}
-              <span class="folder-option-empty">Папок нет</span>
-            {/if}
-          </div>
-        {/if}
+          <Icon name={saveIcon[saveStatus] ?? 'check-circle'} size={14} />
+        </span>
       </div>
-      <span class="save-status {saveClass[saveStatus] ?? 'status-saved'}">
-        {saveLabel[saveStatus] ?? $t('note_status_saved')}
-      </span>
     </div>
 
     <div class="note-content">
@@ -301,9 +310,12 @@
   .editor-header {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 0.5rem;
-    padding: 0.6rem 1rem;
+    min-height: 40px;
+    padding: 0.25rem 1rem;
     flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
   }
 
   .title-wrap {
@@ -335,19 +347,37 @@
 
   .title-input::placeholder { color: var(--text-3); }
 
-  .save-status {
-    font-size: 0.72rem;
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
     flex-shrink: 0;
-    padding: 0.1rem 0.4rem;
-    border-radius: 999px;
-    font-weight: 500;
   }
 
-  .status-saved  { color: var(--success-text); background: var(--success-bg); }
-  .status-saving { color: var(--accent); background: var(--accent-bg); }
-  .status-unsaved { color: var(--warn-text); background: var(--warn-bg); }
-  .status-failed { color: var(--danger-text); background: var(--danger-bg); }
-  .status-external { color: var(--warn-text); background: var(--warn-bg); }
+  .updated-at {
+    font-size: 0.68rem;
+    color: var(--text-3);
+    white-space: nowrap;
+  }
+
+  .save-status-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    line-height: 1;
+  }
+
+  .save-status-icon.status-saved    { color: var(--success-text); }
+  .save-status-icon.status-saving   { color: var(--accent); }
+  .save-status-icon.status-unsaved  { color: var(--warn-text); }
+  .save-status-icon.status-failed   { color: var(--danger-text); }
+  .save-status-icon.status-external { color: var(--warn-text); }
+
+  .spinning :global(svg) {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   .toolbar {
     display: flex;
@@ -400,7 +430,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    margin: 0 0.75rem 0.75rem;
+    margin: 0.5rem 0.75rem 0.75rem;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--surface);
@@ -519,93 +549,4 @@
   }
   .btn-delete:hover { background: #dc2626; }
 
-  /* Folder picker */
-  .folder-picker-wrap {
-    position: relative;
-    flex-shrink: 0;
-  }
-
-  .folder-badge {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.15rem 0.4rem;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: none;
-    cursor: pointer;
-    color: var(--text-3);
-    font-size: 0.72rem;
-    transition: background 0.1s, color 0.1s, border-color 0.1s;
-  }
-
-  .folder-badge:hover { background: var(--surface); color: var(--text-2); }
-  .folder-badge.active { color: var(--text-2); border-color: var(--border); background: var(--surface); }
-
-  .folder-badge-name {
-    max-width: 80px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .folder-badge-dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .folder-dropdown-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 49;
-  }
-
-  .folder-dropdown {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: 0;
-    min-width: 160px;
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-lg);
-    z-index: 50;
-    display: flex;
-    flex-direction: column;
-    padding: 0.25rem;
-    gap: 0.1rem;
-    max-height: 220px;
-    overflow-y: auto;
-  }
-
-  .folder-option {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.3rem 0.5rem;
-    border: none;
-    border-radius: var(--radius-sm);
-    background: none;
-    cursor: pointer;
-    font-size: 0.8rem;
-    color: var(--text-2);
-    text-align: left;
-    transition: background 0.1s;
-  }
-  .folder-option:hover { background: var(--surface); color: var(--text); }
-  .folder-option.selected { color: var(--accent); background: var(--accent-bg); }
-
-  .folder-opt-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .folder-option-empty {
-    padding: 0.3rem 0.5rem;
-    font-size: 0.78rem;
-    color: var(--text-3);
-    font-style: italic;
-  }
 </style>

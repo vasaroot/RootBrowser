@@ -247,6 +247,25 @@ async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // note_folder_links: many-to-many notes ↔ folders
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS note_folder_links (
+            note_id   TEXT NOT NULL,
+            folder_id TEXT NOT NULL,
+            PRIMARY KEY (note_id, folder_id)
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    // Migrate existing folder_id column → note_folder_links (idempotent)
+    sqlx::query(
+        "INSERT OR IGNORE INTO note_folder_links (note_id, folder_id)
+         SELECT id, folder_id FROM notes WHERE folder_id IS NOT NULL",
+    )
+    .execute(pool)
+    .await?;
+
     // ── SSH Layer ──────────────────────────────────────────────────────────────
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS ssh_connections (

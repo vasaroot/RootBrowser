@@ -15,7 +15,8 @@ use commands::notes::{
     note_archive, note_create, note_delete, note_draft_discard, note_draft_save, note_get,
     note_list, note_open_external, note_open_folder, note_reindex, note_restore, note_search,
     note_set_tags, note_sync, note_tag_list, note_tag_create, note_tag_delete, note_tag_update,
-    note_folder_list, note_folder_create, note_folder_update, note_folder_delete, note_set_folder,
+    note_folder_list, note_folder_create, note_folder_update, note_folder_delete,
+    note_add_folder, note_remove_folder, note_add_binding, note_remove_binding,
     note_update, notes_get_dir, notes_set_dir,
 };
 use commands::password::{
@@ -56,6 +57,7 @@ fn fingerprint_presets() -> Vec<fingerprint::PresetInfo> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir()?;
             let data_dir = app_data_dir.join("RootBrowser");
@@ -185,7 +187,10 @@ pub fn run() {
             note_folder_create,
             note_folder_update,
             note_folder_delete,
-            note_set_folder,
+            note_add_folder,
+            note_remove_folder,
+            note_add_binding,
+            note_remove_binding,
             notes_get_dir,
             notes_set_dir,
             // SSH

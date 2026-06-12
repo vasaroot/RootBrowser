@@ -95,8 +95,29 @@ class NotesStore {
     await Promise.all([this.refresh(), this.refreshFolders()]);
   }
 
-  async setNoteFolder(noteId: string, folderId: string | null): Promise<void> {
-    await api.notes.noteSetFolder(noteId, folderId);
+  async addNoteBinding(noteId: string, binding: string): Promise<void> {
+    await api.notes.noteAddBinding(noteId, binding);
+    await this.refresh();
+    if (this.activeNoteId === noteId && this.activeNote && !this.activeNote.bindings.includes(binding)) {
+      this.activeNote = { ...this.activeNote, bindings: [...this.activeNote.bindings, binding] };
+    }
+  }
+
+  async removeNoteBinding(noteId: string, binding: string): Promise<void> {
+    await api.notes.noteRemoveBinding(noteId, binding);
+    await this.refresh();
+    if (this.activeNoteId === noteId && this.activeNote) {
+      this.activeNote = { ...this.activeNote, bindings: this.activeNote.bindings.filter(b => b !== binding) };
+    }
+  }
+
+  async addNoteFolder(noteId: string, folderId: string): Promise<void> {
+    await api.notes.noteAddFolder(noteId, folderId);
+    await this.refresh();
+  }
+
+  async removeNoteFolder(noteId: string, folderId: string): Promise<void> {
+    await api.notes.noteRemoveFolder(noteId, folderId);
     await this.refresh();
   }
 
@@ -319,6 +340,10 @@ class NotesStore {
   async setTags(id: string, tagNames: string[]) {
     await api.notes.setTags(id, tagNames);
     await Promise.all([this.refresh(), this.refreshTags()]);
+    if (this.activeNoteId === id && this.activeNote) {
+      const listItem = this.list.find(n => n.id === id);
+      if (listItem) this.activeNote = { ...this.activeNote, tags: listItem.tags };
+    }
   }
 
   async acceptExternalChange() {

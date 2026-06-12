@@ -51,8 +51,10 @@
         list = list.filter((n) => n.tags.some((tg: { name: string }) => tg.name === activeFilter.id) && !n.archived);
       else if (activeFilter.type === 'tag-group')
         list = list.filter((n) => n.tags.some((tg: { name: string }) => tg.name === activeFilter.id || tg.name.startsWith(activeFilter.id + '/')) && !n.archived);
-      else if (activeFilter.type === 'folder')
-        list = list.filter((n) => n.folder_id === activeFilter.id && !n.archived);
+      else if (activeFilter.type === 'folder') {
+        const ids = folderDescendantIds(activeFilter.id!);
+        list = list.filter((n) => n.folder_ids.some(fid => ids.has(fid)) && !n.archived);
+      }
       else if (activeFilter.type === 'pinned')
         list = list.filter((n) => n.pinned && !n.archived);
       else if (activeFilter.type === 'archived')
@@ -66,7 +68,8 @@
       list = list.filter(
         (n) =>
           n.title.toLowerCase().includes(q) ||
-          n.tags.some((tg: { name: string }) => tg.name.toLowerCase().includes(q))
+          n.tags.some((tg: { name: string }) => tg.name.toLowerCase().includes(q)) ||
+          n.folder_ids.some(fid => notesStore.folders.find(f => f.id === fid)?.name.toLowerCase().includes(q))
       );
     }
 
@@ -103,13 +106,26 @@
 
   async function createNote() {
     if (!createTitle.trim()) return;
+
+    const bindings: string[] = [];
+    if (activeFilter.type === 'workspace' && activeFilter.id)
+      bindings.push(`workspace:${activeFilter.id}`);
+    else if (activeFilter.type === 'profile' && activeFilter.id)
+      bindings.push(`profile:${activeFilter.id}`);
+
     const input: NoteCreateInput = {
       title: createTitle.trim(),
       format: createFormat,
-      bindings: [],
+      bindings,
     };
     try {
       const note = await notesStore.createNote(input);
+
+      if (activeFilter.type === 'folder' && activeFilter.id) {
+        await api.notes.noteAddFolder(note.id, activeFilter.id);
+        await notesStore.refresh();
+      }
+
       showCreate = false;
       createTitle = '';
       await notesStore.openNote(note.id);
@@ -126,6 +142,24 @@
 
   function profileName(id: string): string {
     return profilesStore.list.find((p) => p.id === id)?.name ?? id;
+  }
+
+  function folderName(id: string): string {
+    return notesStore.folders.find((f) => f.id === id)?.name ?? id;
+  }
+
+  function folderDescendantIds(folderId: string): Set<string> {
+    const result = new Set<string>([folderId]);
+    for (const f of notesStore.folders) {
+      if (f.parent_id === folderId) {
+        for (const id of folderDescendantIds(f.id)) result.add(id);
+      }
+    }
+    return result;
+  }
+
+  function folderColor(id: string): string {
+    return notesStore.folders.find((f) => f.id === id)?.color ?? 'var(--text-2)';
   }
 </script>
 
@@ -191,6 +225,8 @@
           oncreate={() => (showCreate = true)}
           {workspaceName}
           {profileName}
+          {folderName}
+          {folderColor}
         />
       </div>
     </div>
@@ -227,7 +263,8 @@
   .notes-page {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 44px - 3rem);
+    height: 100%;
+    min-height: 0;
     overflow: hidden;
     gap: 0.875rem;
   }
@@ -333,7 +370,10 @@
   }
 
   .list-header {
-    padding: 0.4rem 0.5rem;
+    height: 40px;
+    padding: 0 0.5rem;
+    display: flex;
+    align-items: center;
     flex-shrink: 0;
     border-bottom: 1px solid var(--border);
   }
