@@ -1,16 +1,17 @@
 <script lang="ts">
   import { notesStore } from '$lib/store/notes.svelte';
   import { api } from '$lib/api';
-  import type { NoteTag } from '$lib/types';
+  import type { NoteTag, NoteFolder } from '$lib/types';
   import Icon from '$lib/Icon.svelte';
   import NoteTagsInput from './NoteTagsInput.svelte';
   import { t } from '$lib/i18n';
 
   interface Props {
     allTags: NoteTag[];
+    folders: NoteFolder[];
   }
 
-  let { allTags }: Props = $props();
+  let { allTags, folders }: Props = $props();
 
   const note = $derived(notesStore.activeNote);
   const saveStatus = $derived(notesStore.saveStatus);
@@ -31,7 +32,13 @@
     }
   });
 
+  let titleHovered = $state(false);
   let showDeleteConfirm = $state(false);
+  let folderPickerOpen = $state(false);
+
+  const activeFolder = $derived(
+    note ? folders.find(f => f.id === note.folder_id) ?? null : null
+  );
 
   async function confirmDelete() {
     if (!note) return;
@@ -94,37 +101,87 @@
     {/if}
 
     <div class="editor-header">
-      <div class="title-wrap">
+      <div class="title-wrap"
+        onmouseenter={() => titleHovered = true}
+        onmouseleave={() => titleHovered = false}
+      >
         <input
           bind:this={titleInputEl}
           bind:value={titleValue}
           type="text"
           class="title-input"
           placeholder={$t('notes_title_placeholder')}
+          maxlength="100"
           oninput={onTitleChange}
         />
-        <Icon name="pencil" size={13} class="title-edit-icon" />
+        {#if titleHovered}
+          <span class="title-hint"><Icon name="pencil" size={12} /></span>
+        {/if}
+      </div>
+      <NoteTagsInput
+        selectedTags={note.tags}
+        {allTags}
+        onchange={(tagNames) => notesStore.setTags(note!.id, tagNames)}
+      />
+      <!-- Folder picker -->
+      <div class="folder-picker-wrap">
+        <button
+          class="folder-badge"
+          class:active={!!activeFolder}
+          onclick={() => folderPickerOpen = !folderPickerOpen}
+          title="Папка"
+        >
+          <Icon name="folder" size={12} />
+          {#if activeFolder}
+            <span class="folder-badge-name">{activeFolder.name}</span>
+            <span
+              class="folder-badge-dot"
+              style="background:{activeFolder.color}"
+            ></span>
+          {/if}
+        </button>
+        {#if folderPickerOpen}
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+          <div class="folder-dropdown-overlay" onclick={() => folderPickerOpen = false} role="presentation"></div>
+          <div class="folder-dropdown">
+            <button
+              class="folder-option"
+              class:selected={!note.folder_id}
+              onclick={() => { void notesStore.setNoteFolder(note!.id, null); folderPickerOpen = false; }}
+            >
+              <Icon name="x" size={11} />
+              <span>Без папки</span>
+            </button>
+            {#each folders as f (f.id)}
+              <button
+                class="folder-option"
+                class:selected={note.folder_id === f.id}
+                onclick={() => { void notesStore.setNoteFolder(note!.id, f.id); folderPickerOpen = false; }}
+              >
+                <span class="folder-opt-dot" style="background:{f.color}"></span>
+                <span>{f.name}</span>
+              </button>
+            {/each}
+            {#if folders.length === 0}
+              <span class="folder-option-empty">Папок нет</span>
+            {/if}
+          </div>
+        {/if}
       </div>
       <span class="save-status {saveClass[saveStatus] ?? 'status-saved'}">
         {saveLabel[saveStatus] ?? $t('note_status_saved')}
       </span>
     </div>
 
-    <div class="editor-tags">
-      <NoteTagsInput
-        selectedTags={note.tags}
-        {allTags}
-        onchange={(tagNames) => notesStore.setTags(note!.id, tagNames)}
-      />
+    <div class="note-content">
+      <textarea
+        bind:value={contentValue}
+        class="editor-body"
+        placeholder={$t('note_content_placeholder')}
+        oninput={onBodyChange}
+        spellcheck="false"
+      ></textarea>
     </div>
-
-    <textarea
-      bind:value={contentValue}
-      class="editor-body"
-      placeholder={$t('note_content_placeholder')}
-      oninput={onBodyChange}
-      spellcheck="false"
-    ></textarea>
 
     <div class="editor-footer">
       <span class="footer-meta">
@@ -245,31 +302,26 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.75rem 1rem 0.4rem;
+    padding: 0.6rem 1rem;
     flex-shrink: 0;
   }
 
   .title-wrap {
-    flex: 1;
     display: flex;
     align-items: center;
-    gap: 0.4rem;
-    min-width: 0;
+    gap: 0.3rem;
+    width: 180px;
+    flex-shrink: 0;
   }
 
-  .title-wrap :global(.title-edit-icon) {
-    color: var(--text-3, var(--text-2));
-    opacity: 0.5;
-    flex-shrink: 0;
-    transition: opacity 0.15s;
-  }
-  .title-wrap:focus-within :global(.title-edit-icon) {
-    opacity: 1;
+  .title-hint {
     color: var(--accent);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
   }
 
   .title-input {
-    flex: 1;
     background: none;
     border: none;
     outline: none;
@@ -278,6 +330,7 @@
     color: var(--text);
     padding: 0;
     min-width: 0;
+    flex: 1;
   }
 
   .title-input::placeholder { color: var(--text-3); }
@@ -295,11 +348,6 @@
   .status-unsaved { color: var(--warn-text); background: var(--warn-bg); }
   .status-failed { color: var(--danger-text); background: var(--danger-bg); }
   .status-external { color: var(--warn-text); background: var(--warn-bg); }
-
-  .editor-tags {
-    padding: 0 1rem 0.5rem;
-    flex-shrink: 0;
-  }
 
   .toolbar {
     display: flex;
@@ -347,12 +395,22 @@
   }
   .tb-mode-toggle:hover { background: var(--bg-3); color: var(--text-1); }
 
+  .note-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin: 0 0.75rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
   .editor-body {
     flex: 1;
     padding: 0.5rem 1rem;
     background: none;
     border: none;
-    border-top: 1px solid var(--border);
     outline: none;
     resize: none;
     font-size: 0.88rem;
@@ -460,4 +518,94 @@
     font-weight: 500;
   }
   .btn-delete:hover { background: #dc2626; }
+
+  /* Folder picker */
+  .folder-picker-wrap {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .folder-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: none;
+    cursor: pointer;
+    color: var(--text-3);
+    font-size: 0.72rem;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+  }
+
+  .folder-badge:hover { background: var(--surface); color: var(--text-2); }
+  .folder-badge.active { color: var(--text-2); border-color: var(--border); background: var(--surface); }
+
+  .folder-badge-name {
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .folder-badge-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .folder-dropdown-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 49;
+  }
+
+  .folder-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 160px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    padding: 0.25rem;
+    gap: 0.1rem;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  .folder-option {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.5rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: var(--text-2);
+    text-align: left;
+    transition: background 0.1s;
+  }
+  .folder-option:hover { background: var(--surface); color: var(--text); }
+  .folder-option.selected { color: var(--accent); background: var(--accent-bg); }
+
+  .folder-opt-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .folder-option-empty {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.78rem;
+    color: var(--text-3);
+    font-style: italic;
+  }
 </style>

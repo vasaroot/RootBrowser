@@ -87,6 +87,8 @@
       else if (activeFilter.type === 'workspace') list = list.filter((n) => hasBinding(n.bindings, `workspace:${activeFilter.id}`) && !n.archived);
       else if (activeFilter.type === 'profile') list = list.filter((n) => hasBinding(n.bindings, `profile:${activeFilter.id}`) && !n.archived);
       else if (activeFilter.type === 'tag') list = list.filter((n) => n.tags.some((t) => t.name === activeFilter.id) && !n.archived);
+      else if (activeFilter.type === 'tag-group') list = list.filter((n) => n.tags.some((t) => t.name === activeFilter.id || t.name.startsWith(activeFilter.id + '/')) && !n.archived);
+      else if (activeFilter.type === 'folder') list = list.filter((n) => n.folder_id === activeFilter.id && !n.archived);
       else if (activeFilter.type === 'pinned') list = list.filter((n) => n.pinned && !n.archived);
       else if (activeFilter.type === 'archived') list = list.filter((n) => n.archived);
     } else {
@@ -246,6 +248,7 @@
             <NoteFilters
               notes={notesStore.list}
               allTags={notesStore.allTags}
+              folders={notesStore.folders}
               {activeFilter}
               onfilter={handleFilterChange}
             />
@@ -271,7 +274,7 @@
         </div>
 
         <div class="editor-col">
-          <NoteEditor allTags={notesStore.allTags} />
+          <NoteEditor allTags={notesStore.allTags} folders={notesStore.folders} />
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 import { api } from '$lib/api';
-import type { Note, NoteCreateInput, NoteFilter, NoteListItem, NoteTag, NoteUpdateInput, SaveStatus } from '$lib/types';
+import type { Note, NoteCreateInput, NoteFilter, NoteFolder, NoteListItem, NoteTag, NoteUpdateInput, SaveStatus } from '$lib/types';
 import { listen } from '@tauri-apps/api/event';
 
 const AUTOSAVE_DELAY_MS = 3000;
@@ -8,6 +8,7 @@ const DRAFT_INTERVAL_MS = 1000;
 class NotesStore {
   list = $state<NoteListItem[]>([]);
   allTags = $state<NoteTag[]>([]);
+  folders = $state<NoteFolder[]>([]);
   loading = $state(false);
   loaded = $state(false);
   private _promise: Promise<void> | null = null;
@@ -41,7 +42,7 @@ class NotesStore {
   private async _load() {
     this.loading = true;
     try {
-      await Promise.all([this.refresh(), this.refreshTags()]);
+      await Promise.all([this.refresh(), this.refreshTags(), this.refreshFolders()]);
       this.loaded = true;
     } finally {
       this.loading = false;
@@ -56,10 +57,47 @@ class NotesStore {
     this.allTags = await api.notes.tagList();
   }
 
+  async refreshFolders() {
+    this.folders = await api.notes.folderList();
+  }
+
   async createTag(name: string, color?: string): Promise<NoteTag> {
     const tag = await api.notes.tagCreate(name, color);
     await this.refreshTags();
     return tag;
+  }
+
+  async deleteTag(id: string): Promise<void> {
+    await api.notes.tagDelete(id);
+    await Promise.all([this.refresh(), this.refreshTags()]);
+  }
+
+  async updateTag(id: string, name?: string, color?: string): Promise<NoteTag> {
+    const tag = await api.notes.tagUpdate(id, name, color);
+    await Promise.all([this.refresh(), this.refreshTags()]);
+    return tag;
+  }
+
+  async createFolder(name: string, parent_id?: string, color?: string): Promise<NoteFolder> {
+    const folder = await api.notes.folderCreate(name, parent_id, color);
+    await this.refreshFolders();
+    return folder;
+  }
+
+  async updateFolder(id: string, name?: string, color?: string): Promise<NoteFolder> {
+    const folder = await api.notes.folderUpdate(id, name, color);
+    await this.refreshFolders();
+    return folder;
+  }
+
+  async deleteFolder(id: string): Promise<void> {
+    await api.notes.folderDelete(id);
+    await Promise.all([this.refresh(), this.refreshFolders()]);
+  }
+
+  async setNoteFolder(noteId: string, folderId: string | null): Promise<void> {
+    await api.notes.noteSetFolder(noteId, folderId);
+    await this.refresh();
   }
 
   /** Open a note in the editor */

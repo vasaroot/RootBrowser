@@ -14,7 +14,9 @@ use commands::camoufox::{
 use commands::notes::{
     note_archive, note_create, note_delete, note_draft_discard, note_draft_save, note_get,
     note_list, note_open_external, note_open_folder, note_reindex, note_restore, note_search,
-    note_set_tags, note_sync, note_tag_list, note_tag_create, note_update, notes_get_dir, notes_set_dir,
+    note_set_tags, note_sync, note_tag_list, note_tag_create, note_tag_delete, note_tag_update,
+    note_folder_list, note_folder_create, note_folder_update, note_folder_delete, note_set_folder,
+    note_update, notes_get_dir, notes_set_dir,
 };
 use commands::password::{
     pwgen_history_add, pwgen_history_clear, pwgen_history_list, pwgen_history_trim,
@@ -177,6 +179,13 @@ pub fn run() {
             note_draft_discard,
             note_tag_list,
             note_tag_create,
+            note_tag_delete,
+            note_tag_update,
+            note_folder_list,
+            note_folder_create,
+            note_folder_update,
+            note_folder_delete,
+            note_set_folder,
             notes_get_dir,
             notes_set_dir,
             // SSH

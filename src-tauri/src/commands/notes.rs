@@ -35,6 +35,7 @@ struct NoteRow {
     pub preview: String,
     /// JSON array of binding strings, e.g. ["workspace:id", "profile:id"]
     pub bindings: String,
+    pub folder_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -62,6 +63,7 @@ pub struct NoteListItem {
     pub format: String,
     pub bindings: Vec<String>,
     pub tags: Vec<NoteTagInfo>,
+    pub folder_id: Option<String>,
     pub pinned: bool,
     pub archived: bool,
     pub doc_status: String,
@@ -69,6 +71,16 @@ pub struct NoteListItem {
     pub updated_at: String,
     pub has_draft: bool,
     pub preview: String,
+}
+
+#[derive(Debug, Serialize, Clone, FromRow)]
+pub struct NoteFolder {
+    pub id: String,
+    pub name: String,
+    pub parent_id: Option<String>,
+    pub color: String,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
@@ -703,6 +715,7 @@ fn row_to_list_item(row: NoteRow, tags: Vec<NoteTagInfo>, has_draft: bool) -> No
         format: row.format,
         bindings,
         tags,
+        folder_id: row.folder_id,
         pinned: row.pinned != 0,
         archived: row.archived != 0,
         doc_status: row.doc_status,
@@ -865,6 +878,7 @@ pub async fn note_create(
         content_hash: None,
         preview: String::new(),
         bindings: bindings_json.clone(),
+        folder_id: None,
     };
 
     let tag_names = input.tag_names.clone().unwrap_or_default();
@@ -1352,6 +1366,199 @@ pub async fn note_tag_create(
     .map_err(AppError::db)?;
 
     Ok(tag)
+}
+
+#[tauri::command]
+pub async fn note_tag_delete(
+    id: String,
+    state: tauri::State<'_, AppState>,
+) -> CmdResult<()> {
+    sqlx::query("DELETE FROM note_tag_links WHERE tag_id = ?")
+        .bind(&id)
+        .execute(&state.db)
+        .await
+        .map_err(AppError::db)?;
+    sqlx::query("DELETE FROM note_tags WHERE id = ?")
+        .bind(&id)
+        .execute(&state.db)
+        .await
+        .map_err(AppError::db)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn note_tag_update(
+    id: String,
+    name: Option<String>,
+    color: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> CmdResult<NoteTag> {
+    let now = Utc::now().to_rfc3339();
+    let name = name.map(|n| n.trim().to_lowercase()).filter(|n| !n.is_empty());
+    sqlx::query(
+        "UPDATE note_tags SET
+            name       = COALESCE(?, name),
+            color      = COALESCE(?, color),
+            updated_at = ?
+         WHERE id = ?",
+    )
+    .bind(&name)
+    .bind(&color)
+    .bind(&now)
+    .bind(&id)
+    .execute(&state.db)
+    .await
+    .map_err(AppError::db)?;
+
+    let tag = sqlx::query_as::<_, NoteTag>(
+        "SELECT id, name, color, created_at, updated_at FROM note_tags WHERE id = ?",
+    )
+    .bind(&id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(AppError::db)?;
+
+    Ok(tag)
+}
+
+// ── Folder commands ────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn note_folder_list(state: tauri::State<'_, AppState>) -> CmdResult<Vec<NoteFolder>> {
+    sqlx::query_as::<_, NoteFolder>(
+        "SELECT id, name, parent_id, color, created_at, updated_at FROM note_folders ORDER BY name",
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(AppError::db)
+}
+
+#[tauri::command]
+pub async fn note_folder_create(
+    name: String,
+    parent_id: Option<String>,
+    color: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> CmdResult<NoteFolder> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err(AppError::io("Folder name cannot be empty"));
+    }
+    let id = Uuid::new_v4().to_string();
+    let color = color.unwrap_or_else(|| "#6366f1".to_string());
+    let now = Utc::now().to_rfc3339();
+
+    sqlx::query(
+        "INSERT INTO note_folders (id, name, parent_id, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&id)
+    .bind(&name)
+    .bind(&parent_id)
+    .bind(&color)
+    .bind(&now)
+    .bind(&now)
+    .execute(&state.db)
+    .await
+    .map_err(AppError::db)?;
+
+    sqlx::query_as::<_, NoteFolder>(
+        "SELECT id, name, parent_id, color, created_at, updated_at FROM note_folders WHERE id = ?",
+    )
+    .bind(&id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(AppError::db)
+}
+
+#[tauri::command]
+pub async fn note_folder_update(
+    id: String,
+    name: Option<String>,
+    color: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> CmdResult<NoteFolder> {
+    let now = Utc::now().to_rfc3339();
+    let name = name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
+    sqlx::query(
+        "UPDATE note_folders SET
+            name       = COALESCE(?, name),
+            color      = COALESCE(?, color),
+            updated_at = ?
+         WHERE id = ?",
+    )
+    .bind(&name)
+    .bind(&color)
+    .bind(&now)
+    .bind(&id)
+    .execute(&state.db)
+    .await
+    .map_err(AppError::db)?;
+
+    sqlx::query_as::<_, NoteFolder>(
+        "SELECT id, name, parent_id, color, created_at, updated_at FROM note_folders WHERE id = ?",
+    )
+    .bind(&id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(AppError::db)
+}
+
+#[tauri::command]
+pub async fn note_folder_delete(
+    id: String,
+    state: tauri::State<'_, AppState>,
+) -> CmdResult<()> {
+    // Collect all descendant folder IDs recursively using CTE
+    let descendants: Vec<(String,)> = sqlx::query_as(
+        "WITH RECURSIVE sub(id) AS (
+            SELECT id FROM note_folders WHERE id = ?
+            UNION ALL
+            SELECT f.id FROM note_folders f JOIN sub ON f.parent_id = sub.id
+         )
+         SELECT id FROM sub",
+    )
+    .bind(&id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(AppError::db)?;
+
+    for (fid,) in &descendants {
+        // Detach notes from this folder
+        sqlx::query("UPDATE notes SET folder_id = NULL WHERE folder_id = ?")
+            .bind(fid)
+            .execute(&state.db)
+            .await
+            .map_err(AppError::db)?;
+    }
+
+    // Delete all descendant folders (children first via CTE ordering handled by FK cascade
+    // but SQLite may not enforce it, so delete in reverse BFS order via delete by ids)
+    for (fid,) in descendants.iter().rev() {
+        sqlx::query("DELETE FROM note_folders WHERE id = ?")
+            .bind(fid)
+            .execute(&state.db)
+            .await
+            .map_err(AppError::db)?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn note_set_folder(
+    note_id: String,
+    folder_id: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> CmdResult<()> {
+    let now = Utc::now().to_rfc3339();
+    sqlx::query("UPDATE notes SET folder_id = ?, updated_at = ? WHERE id = ?")
+        .bind(&folder_id)
+        .bind(&now)
+        .bind(&note_id)
+        .execute(&state.db)
+        .await
+        .map_err(AppError::db)?;
+    Ok(())
 }
 
 // ── Notes directory settings ──────────────────────────────────────────────────

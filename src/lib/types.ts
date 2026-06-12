@@ -270,6 +270,15 @@ export interface NoteTag {
   updated_at: string;
 }
 
+export interface NoteFolder {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  color: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface NoteListItem {
   id: string;
   title: string;
@@ -277,6 +286,7 @@ export interface NoteListItem {
   /** Context bindings, e.g. ["workspace:id", "profile:id"] */
   bindings: string[];
   tags: NoteTagInfo[];
+  folder_id: string | null;
   pinned: boolean;
   archived: boolean;
   doc_status: NoteDocStatus;
@@ -311,6 +321,7 @@ export interface NoteFilter {
   /** Filter notes that contain this binding, e.g. "workspace:id" or "profile:id" */
   binding?: string;
   tag_name?: string;
+  folder_id?: string;
   pinned?: boolean;
   archived?: boolean;
   include_deleted?: boolean;

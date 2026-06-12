@@ -107,6 +107,10 @@
         <Icon name="globe" size={14} />
         {$t('nav_proxies')}
       </a>
+      <a href="/notes" class="nav-link" class:active={isActive('/notes')}>
+        <Icon name="file-text" size={14} />
+        {$t('nav_notes')}
+      </a>
       <a href="/settings" class="nav-link" class:active={isActive('/settings')}>
         <Icon name="settings" size={14} />
         {$t('nav_settings')}

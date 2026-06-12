@@ -9,6 +9,7 @@ const translations = {
     nav_profiles: 'Profiles',
     nav_proxies: 'Proxies',
     nav_settings: 'Settings',
+    nav_notes: 'Notes',
 
     // Workspaces page
     workspaces_title: 'Workspaces',
@@ -360,12 +361,12 @@ const translations = {
     notes_filter_pinned: 'Pinned',
     notes_filter_archived: 'Archived',
     notes_filter_workspaces: 'Workspaces',
-    notes_areas_title: 'Areas',
+    notes_areas_title: 'Tags',
     notes_areas_new: 'New area',
     notes_areas_color: 'Pick color',
     notes_areas_placeholder: 'Area name',
     notes_areas_add: 'Add',
-    notes_areas_empty: 'No areas yet',
+    notes_areas_empty: 'No tags yet',
 
     // Notes list
     notes_scope_global: 'Global',
@@ -380,7 +381,12 @@ const translations = {
 
     // Note tags input
     notes_tags_placeholder: 'Add tags…',
+    notes_tags_add: 'Add tag',
     notes_tags_create: 'Create "{name}"',
+    notes_tag_rename: 'Rename',
+    notes_tag_delete: 'Delete',
+    notes_tag_save: 'Save',
+
 
     // Profile panel – notes tab
     panel_tab_notes: 'Notes',
@@ -482,6 +488,7 @@ const translations = {
     nav_profiles: 'Профили',
     nav_proxies: 'Прокси',
     nav_settings: 'Настройки',
+    nav_notes: 'Заметки',
 
     // Workspaces page
     workspaces_title: 'Воркспейсы',
@@ -833,12 +840,12 @@ const translations = {
     notes_filter_pinned: 'Закреплённые',
     notes_filter_archived: 'Архив',
     notes_filter_workspaces: 'Воркспейсы',
-    notes_areas_title: 'Области',
+    notes_areas_title: 'Теги',
     notes_areas_new: 'Новая область',
     notes_areas_color: 'Выбрать цвет',
     notes_areas_placeholder: 'Название области',
     notes_areas_add: 'Добавить',
-    notes_areas_empty: 'Нет областей',
+    notes_areas_empty: 'Тегов пока нет',
 
     // Notes list
     notes_scope_global: 'Глобальная',
@@ -853,7 +860,12 @@ const translations = {
 
     // Note tags input
     notes_tags_placeholder: 'Добавить теги…',
+    notes_tags_add: 'Добавить тег',
     notes_tags_create: 'Создать "{name}"',
+    notes_tag_rename: 'Переименовать',
+    notes_tag_delete: 'Удалить',
+    notes_tag_save: 'Сохранить',
+
 
     // Profile panel – notes tab
     panel_tab_notes: 'Заметки',

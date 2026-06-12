@@ -232,6 +232,20 @@ async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
     add_column_if_not_exists(pool, "proxies", "tags", "TEXT NOT NULL DEFAULT '[]'").await?;
     add_column_if_not_exists(pool, "notes", "preview", "TEXT NOT NULL DEFAULT ''").await?;
     add_column_if_not_exists(pool, "notes", "bindings", "TEXT NOT NULL DEFAULT '[]'").await?;
+    add_column_if_not_exists(pool, "notes", "folder_id", "TEXT NULL").await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS note_folders (
+            id         TEXT PRIMARY KEY NOT NULL,
+            name       TEXT NOT NULL,
+            parent_id  TEXT NULL REFERENCES note_folders(id),
+            color      TEXT NOT NULL DEFAULT '#6366f1',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )",
+    )
+    .execute(pool)
+    .await?;
 
     // ── SSH Layer ──────────────────────────────────────────────────────────────
     sqlx::query(

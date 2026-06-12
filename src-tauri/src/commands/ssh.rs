@@ -325,7 +325,6 @@ async fn do_authenticate(
                         methods.join(", ")
                     )
                 }
-                other => anyhow::bail!("Unexpected auth result: {other:?}"),
             }
         }
         other => anyhow::bail!("Unknown auth_type: {other}"),
