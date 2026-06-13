@@ -294,6 +294,7 @@ export interface NoteListItem {
   updated_at: string;
   has_draft: boolean;
   preview: string;
+  snippet?: string;
 }
 
 export interface Note extends NoteListItem {

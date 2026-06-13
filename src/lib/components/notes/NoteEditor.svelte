@@ -7,6 +7,7 @@
   import Icon from '$lib/Icon.svelte';
   import NoteTagsInput from './NoteTagsInput.svelte';
   import { t } from '$lib/i18n';
+  import { tick } from 'svelte';
 
   interface Props {
     allTags: NoteTag[];
@@ -34,8 +35,25 @@
     }
   });
 
+  let textareaEl: HTMLTextAreaElement | null = $state(null);
   let titleHovered = $state(false);
   let showDeleteConfirm = $state(false);
+
+  $effect(() => {
+    const query = notesStore.searchQuery;
+    const content = contentValue;
+    if (!textareaEl || !query || !content) return;
+    const idx = content.toLowerCase().indexOf(query.toLowerCase());
+    if (idx < 0) return;
+    tick().then(() => {
+      if (!textareaEl) return;
+      textareaEl.setSelectionRange(idx, idx + query.length);
+      const linesBefore = content.substring(0, idx).split('\n').length - 1;
+      const lineHeight = parseFloat(getComputedStyle(textareaEl).lineHeight) || 22;
+      textareaEl.scrollTop = Math.max(0, linesBefore * lineHeight - textareaEl.clientHeight / 3);
+      textareaEl.focus();
+    });
+  });
 
   const contextChips = $derived.by(() => {
     if (!note) return [];
@@ -184,6 +202,7 @@
 
     <div class="note-content">
       <textarea
+        bind:this={textareaEl}
         bind:value={contentValue}
         class="editor-body"
         placeholder={$t('note_content_placeholder')}

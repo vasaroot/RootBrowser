@@ -79,6 +79,7 @@
 
   async function handleSearch() {
     if (!searchQuery.trim()) {
+      notesStore.searchQuery = '';
       await notesStore.refresh();
       return;
     }
@@ -86,6 +87,7 @@
     try {
       const results = await api.notes.search(searchQuery, noteFilter);
       notesStore.list = results;
+      notesStore.searchQuery = searchQuery.trim();
     } catch {}
     finally { searching = false; }
   }
@@ -109,6 +111,7 @@
   async function handleFilterChange(f: { type: string; id?: string }) {
     activeFilter = f;
     searchQuery = '';
+    notesStore.searchQuery = '';
     await notesStore.refresh();
   }
 

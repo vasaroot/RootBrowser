@@ -109,7 +109,9 @@
           <span class="note-time">{relativeTime(note.updated_at)}</span>
         </div>
 
-        {#if note.preview}
+        {#if note.snippet}
+          <p class="note-preview note-snippet">{@html note.snippet}</p>
+        {:else if note.preview}
           <p class="note-preview">{note.preview}</p>
         {/if}
 
@@ -258,6 +260,13 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     line-height: 1.4;
+  }
+
+  .note-snippet :global(mark) {
+    background: color-mix(in srgb, var(--accent) 25%, transparent);
+    color: var(--text-1);
+    border-radius: 2px;
+    padding: 0 1px;
   }
 
   .card-tags {

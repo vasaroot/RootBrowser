@@ -209,7 +209,7 @@
                 <code>{proxy.host}:{proxy.port}</code>
               </td>
               <td class="col-status">
-                <span class="status-badge status-{proxy.status}">{proxy.status}</span>
+                <span class="status-badge status-{proxy.status}">{$t('proxies_filter_' + proxy.status)}</span>
               </td>
               <td class="col-geo">
                 {#if proxy.country}

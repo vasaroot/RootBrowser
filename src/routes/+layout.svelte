@@ -361,7 +361,8 @@
   .layout {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: calc(100vh - var(--inspector-bar-height, 0px));
+    margin-top: var(--inspector-bar-height, 0px);
   }
 
   /* ── Top Bar ── */
@@ -459,7 +460,7 @@
     position: fixed;
     left: 0;
     right: 0;
-    top: 44px;
+    top: calc(44px + var(--inspector-bar-height, 0px));
     /* bottom is set via inline style = terminalBottom */
     overflow: hidden;
     pointer-events: none;

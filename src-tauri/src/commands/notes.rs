@@ -71,6 +71,7 @@ pub struct NoteListItem {
     pub updated_at: String,
     pub has_draft: bool,
     pub preview: String,
+    pub snippet: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone, FromRow)]
@@ -740,6 +741,7 @@ fn row_to_list_item(row: NoteRow, tags: Vec<NoteTagInfo>, folder_ids: Vec<String
         updated_at: row.updated_at,
         has_draft,
         preview: row.preview,
+        snippet: None,
     }
 }
 
@@ -1193,18 +1195,20 @@ pub async fn note_search(
 ) -> CmdResult<Vec<NoteListItem>> {
     let fts_query = format!("{}*", query.trim());
 
-    let matched_ids: Vec<(String,)> =
-        sqlx::query_as("SELECT note_id FROM notes_fts WHERE notes_fts MATCH ? ORDER BY rank LIMIT 100")
+    let matched: Vec<(String, String)> =
+        sqlx::query_as("SELECT note_id, snippet(notes_fts, 2, '<mark>', '</mark>', '…', 12) FROM notes_fts WHERE notes_fts MATCH ? ORDER BY rank LIMIT 100")
             .bind(&fts_query)
             .fetch_all(&state.db)
             .await
             .map_err(AppError::db)?;
 
-    if matched_ids.is_empty() {
+    if matched.is_empty() {
         return Ok(vec![]);
     }
 
-    let ids: Vec<String> = matched_ids.into_iter().map(|(id,)| id).collect();
+    let snippets_map: std::collections::HashMap<String, String> =
+        matched.iter().map(|(id, snip)| (id.clone(), snip.clone())).collect();
+    let ids: Vec<String> = matched.into_iter().map(|(id, _)| id).collect();
     let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
     let sql = format!(
         "SELECT * FROM notes WHERE id IN ({}) AND deleted = 0 ORDER BY pinned DESC, updated_at DESC",
@@ -1234,7 +1238,9 @@ pub async fn note_search(
             let tags = tags_map.get(&r.id).cloned().unwrap_or_default();
             let folder_ids = folder_ids_map.get(&r.id).cloned().unwrap_or_default();
             let has_draft = drafts_dir.join(format!("{}.draft", r.id)).exists();
-            row_to_list_item(r, tags, folder_ids, has_draft)
+            let mut item = row_to_list_item(r, tags, folder_ids, has_draft);
+            item.snippet = snippets_map.get(&item.id).cloned();
+            item
         })
         .collect();
 
