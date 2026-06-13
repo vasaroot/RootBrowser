@@ -82,22 +82,42 @@
   }
 
   // ── Tag inline edit ───────────────────────────────────────────────────────────
-  let editTagId = $state<string | null>(null);
-  let editName  = $state('');
-  let editColor = $state('');
+  let tagEditModalOpen = $state(false);
+  let tagEditTag       = $state<NoteTag | null>(null);
+  let tagEditName      = $state('');
+  let tagEditColor     = $state(TAG_COLORS[0]);
+  let tagEditInputEl   = $state<HTMLInputElement | null>(null);
+  let tagEditSaving    = $state(false);
 
   function startEdit(tag: NoteTag, e: MouseEvent) {
     e.stopPropagation();
-    editTagId = tag.id;
-    editName  = tag.name;
-    editColor = tag.color;
+    tagEditTag       = tag;
+    tagEditName      = tag.name;
+    tagEditColor     = tag.color;
+    tagEditModalOpen = true;
+    setTimeout(() => tagEditInputEl?.focus(), 50);
   }
 
-  async function saveEdit(e?: KeyboardEvent | MouseEvent) {
-    if (e instanceof KeyboardEvent && e.key !== 'Enter') return;
-    if (!editTagId || !editName.trim()) return;
-    await notesStore.updateTag(editTagId, editName.trim(), editColor);
-    editTagId = null;
+  function closeTagEditModal() {
+    tagEditModalOpen = false;
+    tagEditTag       = null;
+    tagEditName      = '';
+  }
+
+  async function saveTagEdit() {
+    if (!tagEditTag || !tagEditName.trim() || tagEditSaving) return;
+    tagEditSaving = true;
+    try {
+      await notesStore.updateTag(tagEditTag.id, tagEditName.trim(), tagEditColor);
+      closeTagEditModal();
+    } finally {
+      tagEditSaving = false;
+    }
+  }
+
+  function onTagEditKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter' && tagEditName.trim()) { e.preventDefault(); void saveTagEdit(); }
+    if (e.key === 'Escape') closeTagEditModal();
   }
 
   async function deleteTag(tag: NoteTag, e: MouseEvent) {
@@ -146,7 +166,12 @@
   }
 
   // ── Folder context menu ───────────────────────────────────────────────────────
-  let openFolderMenuId = $state<string | null>(null);
+  let openMenuKey      = $state<string | null>(null); // 'folder:id' | 'tag:path'
+  let hoveredFolderId  = $state<string | null>(null);
+  let hoveredTagPath   = $state<string | null>(null);
+
+  const openFolderMenuId = $derived(openMenuKey?.startsWith('folder:') ? openMenuKey.slice('folder:'.length) : null);
+  const openTagMenuPath  = $derived(openMenuKey?.startsWith('tag:')    ? openMenuKey.slice('tag:'.length)    : null);
 
   // ── Folder inline edit ────────────────────────────────────────────────────────
   let editFolderId    = $state<string | null>(null);
@@ -294,8 +319,8 @@
 </script>
 
 <svelte:window
-  onkeydown={(e) => { if (e.key === 'Escape') { closePopup(); openFolderMenuId = null; } }}
-  onclick={() => openFolderMenuId = null}
+  onkeydown={(e) => { if (e.key === 'Escape') { closePopup(); openMenuKey = null; } }}
+  onclick={() => { openMenuKey = null; }}
 />
 
 {#snippet folderNode(node: FolderNode, depth: number)}
@@ -321,7 +346,10 @@
         </button>
       </div>
     {:else}
-      <div class="tree-row folder-row">
+      <div class="tree-row folder-row"
+        onmouseenter={() => hoveredFolderId = f.id}
+        onmouseleave={() => hoveredFolderId = null}
+      >
         <button
           class="{filterClass('folder', f.id)} tree-item"
           style="padding-left: {depth > 0 ? '1.5rem' : '0.5rem'}"
@@ -342,26 +370,30 @@
         {/if}
 
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="count-wrap" class:menu-open={openFolderMenuId === f.id} onclick={(e) => e.stopPropagation()}>
+        <div class="count-wrap"
+          class:menu-open={openFolderMenuId === f.id}
+          class:hovered={hoveredFolderId === f.id}
+          onclick={(e) => e.stopPropagation()}
+        >
           {#if node.noteCount > 0}
             <span class="count count-num">{node.noteCount}</span>
           {/if}
           <button
             class="dots-btn"
-            onclick={(e) => { e.stopPropagation(); openFolderMenuId = openFolderMenuId === f.id ? null : f.id; }}
+            onclick={(e) => { e.stopPropagation(); openMenuKey = openMenuKey === `folder:${f.id}` ? null : `folder:${f.id}`; }}
             title="Действия"
           >
             <Icon name="more-vertical" size={11} />
           </button>
           {#if openFolderMenuId === f.id}
             <div class="folder-menu">
-              <button onclick={() => { openFolderModal(f.id); openFolderMenuId = null; }}>
+              <button onclick={() => { openFolderModal(f.id); openMenuKey = null; }}>
                 <Icon name="folder-plus" size={11} /><span>Подпапка</span>
               </button>
-              <button onclick={(e) => { startEditFolder(f, e); openFolderMenuId = null; }}>
-                <Icon name="pencil" size={11} /><span>Переименовать</span>
+              <button onclick={(e) => { startEditFolder(f, e); openMenuKey = null; }}>
+                <Icon name="pencil" size={11} /><span>Редактировать</span>
               </button>
-              <button class="menu-del" onclick={(e) => { void deleteFolder(f, e); openFolderMenuId = null; }}>
+              <button class="menu-del" onclick={(e) => { void deleteFolder(f, e); openMenuKey = null; }}>
                 <Icon name="trash-2" size={11} /><span>Удалить</span>
               </button>
             </div>
@@ -385,25 +417,10 @@
   {@const filterType  = hasChildren ? 'tag-group' : 'tag'}
 
   <div class="tree-node">
-    {#if editTagId !== null && node.tag?.id === editTagId}
-      <div class="edit-row" style="padding-left: {depth * 1.0 + 0.5}rem">
-        <input type="color" bind:value={editColor} class="color-pick" title={$t('notes_areas_color')} />
-        <input
-          type="text"
-          bind:value={editName}
-          class="edit-input"
-          placeholder={node.label}
-          onkeydown={(e) => { if (e.key === 'Enter') saveEdit(e); if (e.key === 'Escape') editTagId = null; }}
-        />
-        <button class="btn-icon-xs btn-save" onclick={saveEdit} disabled={!editName.trim()} title={$t('notes_tag_save')}>
-          <Icon name="check" size={11} />
-        </button>
-        <button class="btn-icon-xs btn-cancel" onclick={() => editTagId = null} title="Отмена">
-          <Icon name="x" size={11} />
-        </button>
-      </div>
-    {:else}
-      <div class="tree-row" style="padding-left: {depth * 1.0}rem">
+      <div class="tree-row tag-row" style="padding-left: {depth * 1.0}rem"
+        onmouseenter={() => hoveredTagPath = node.fullPath}
+        onmouseleave={() => hoveredTagPath = null}
+      >
         <button
           class="{filterClass(filterType, node.fullPath)} tree-item"
           onclick={() => onfilter({ type: filterType, id: node.fullPath })}
@@ -422,17 +439,35 @@
           </button>
         {/if}
 
-        {#if node.tag}
-          <div class="item-actions">
-            <button class="action-btn" onclick={(e) => startEdit(node.tag!, e)} title={$t('notes_tag_rename')}>
-              <Icon name="pencil" size={10} />
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+        <div class="count-wrap"
+          class:menu-open={openTagMenuPath === node.fullPath}
+          class:hovered={node.tag && hoveredTagPath === node.fullPath}
+          onclick={(e) => e.stopPropagation()}
+        >
+          {#if count > 0}
+            <span class="count count-num">{count}</span>
+          {/if}
+          {#if node.tag}
+            <button
+              class="dots-btn"
+              onclick={(e) => { e.stopPropagation(); openMenuKey = openMenuKey === `tag:${node.fullPath}` ? null : `tag:${node.fullPath}`; }}
+              title="Действия"
+            >
+              <Icon name="more-vertical" size={11} />
             </button>
-            <button class="action-btn action-del" onclick={(e) => deleteTag(node.tag!, e)} title={$t('notes_tag_delete')}>
-              <Icon name="trash-2" size={10} />
-            </button>
-          </div>
-        {/if}
-        {#if count > 0}<span class="count">{count}</span>{/if}
+            {#if openTagMenuPath === node.fullPath}
+              <div class="folder-menu">
+                <button onclick={(e) => { startEdit(node.tag!, e); openMenuKey = null; }}>
+                  <Icon name="pencil" size={11} /><span>Редактировать</span>
+                </button>
+                <button class="menu-del" onclick={(e) => { void deleteTag(node.tag!, e); openMenuKey = null; }}>
+                  <Icon name="trash-2" size={11} /><span>Удалить</span>
+                </button>
+              </div>
+            {/if}
+          {/if}
+        </div>
       </div>
 
       {#if hasChildren && !isCollapsed}
@@ -446,7 +481,6 @@
           </button>
         </div>
       {/if}
-    {/if}
   </div>
 {/snippet}
 
@@ -646,6 +680,45 @@
   </div>
 {/if}
 
+<!-- Модалка редактирования тега -->
+{#if tagEditModalOpen}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+  <div class="modal-overlay" onclick={closeTagEditModal} role="presentation" tabindex="-1">
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+    <div class="modal-box" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <span class="modal-title">Редактировать тег</span>
+        <button class="btn-icon-xs btn-cancel" onclick={closeTagEditModal}><Icon name="x" size={13} /></button>
+      </div>
+
+      <input
+        bind:this={tagEditInputEl}
+        bind:value={tagEditName}
+        type="text"
+        class="popup-input"
+        placeholder="название тега"
+        onkeydown={onTagEditKeydown}
+      />
+
+      <div class="color-row">
+        {#each TAG_COLORS as c}
+          <button class="color-swatch" class:active={tagEditColor === c} style="background:{c}" onclick={() => tagEditColor = c}></button>
+        {/each}
+        <label class="color-swatch color-swatch-custom" class:active={!TAG_COLORS.includes(tagEditColor)} title="Свой цвет">
+          <input type="color" bind:value={tagEditColor} />
+          {#if !TAG_COLORS.includes(tagEditColor)}
+            <span class="custom-dot" style="background:{tagEditColor}"></span>
+          {/if}
+        </label>
+      </div>
+
+      <button class="create-btn" onclick={saveTagEdit} disabled={!tagEditName.trim() || tagEditSaving}>
+        {tagEditSaving ? '…' : 'Сохранить'}
+      </button>
+    </div>
+  </div>
+{/if}
+
 <style>
   .filters {
     display: flex;
@@ -837,10 +910,10 @@
   .dots-btn:hover { color: var(--text); background: var(--surface); }
 
   /* Показываем точки при ховере строки папки или когда меню открыто */
-  .folder-row:hover .count-wrap .count-num,
+  .count-wrap.hovered .count-num,
   .count-wrap.menu-open .count-num { display: none; }
 
-  .folder-row:hover .count-wrap .dots-btn,
+  .count-wrap.hovered .dots-btn,
   .count-wrap.menu-open .dots-btn  { display: flex; }
 
   .folder-menu {
