@@ -532,7 +532,7 @@
           {#if !collapsed.has('ws:' + ws.id)}
             {#each ws.profiles as p (p.id)}
               <button class="{filterClass('profile', p.id)} nav-item profile-item" onclick={() => onfilter({ type: 'profile', id: p.id })}>
-                <span class="icon-slot"><Icon name="user" size={11} /></span>
+                <span class="icon-slot"><Icon name="browser" size={11} /></span>
                 <span class="item-name">{p.name}</span>
                 <span class="count">{p.noteCount}</span>
               </button>

@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
-  import type { SshConnection } from '$lib/types';
+  import type { SshConnection, Proxy } from '$lib/types';
   import Icon from '$lib/Icon.svelte';
   import Modal from '$lib/Modal.svelte';
   import SSHConnectionForm from '$lib/components/ssh/SSHConnectionForm.svelte';
+  import ProxyPanel from '$lib/components/ProxyPanel.svelte';
   import { sshStore } from '$lib/store/ssh.svelte';
   import { proxiesStore } from '$lib/store/proxies.svelte';
   import { api } from '$lib/api';
@@ -21,6 +22,7 @@
   let page = $state(0);
 
   let panelConn = $state<SshConnection | null | undefined>(undefined);
+  let editProxy = $state<Proxy | undefined>(undefined);
   let deleteModal = $state({ open: false, id: '', name: '' });
   let connectingId = $state<string | null>(null);
 
@@ -119,6 +121,16 @@
     if (!id) return '—';
     return proxiesStore.list.find((p) => p.id === id)?.name ?? id.slice(0, 8);
   }
+
+  function proxyForConn(id: string | null): Proxy | undefined {
+    if (!id) return undefined;
+    return proxiesStore.list.find((p) => p.id === id);
+  }
+
+  function onProxySaved(proxy: Proxy) {
+    proxiesStore.list = proxiesStore.list.map((p) => p.id === proxy.id ? proxy : p);
+    editProxy = undefined;
+  }
 </script>
 
 <div class="page">
@@ -212,7 +224,15 @@
                 </div>
               </td>
               <td class="col-proxy">
-                <span class="text-muted">{proxyName(conn.proxy_id)}</span>
+                {#if conn.proxy_id}
+                  <button
+                    class="proxy-chip"
+                    title="Edit proxy"
+                    onclick={(e) => { e.stopPropagation(); editProxy = proxyForConn(conn.proxy_id); }}
+                  >{proxyName(conn.proxy_id)}</button>
+                {:else}
+                  <span class="text-muted">—</span>
+                {/if}
               </td>
               <td class="col-last">
                 <span class="date-cell">
@@ -300,6 +320,14 @@
       </div>
     </div>
   </div>
+{/if}
+
+{#if editProxy !== undefined}
+  <ProxyPanel
+    proxy={editProxy}
+    onclose={() => (editProxy = undefined)}
+    onsaved={onProxySaved}
+  />
 {/if}
 
 <Modal
@@ -428,6 +456,16 @@
   .date-cell { display: flex; flex-direction: column; gap: 0.05rem; }
   .date-cell span { color: var(--text-3); font-size: 0.75rem; }
   .time-part { color: var(--text-4, var(--text-3)); font-size: 0.7rem; opacity: 0.75; }
+
+  .proxy-chip {
+    display: inline-flex; align-items: center;
+    background: var(--accent-bg); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+    color: var(--accent); border-radius: 999px;
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.03em;
+    padding: 0.15rem 0.5rem; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .proxy-chip:hover { background: color-mix(in srgb, var(--accent) 15%, var(--accent-bg)); }
 
   .text-muted { color: var(--text-3); font-size: 0.75rem; }
   .row-actions { display: flex; gap: 0.25rem; flex-shrink: 0; }

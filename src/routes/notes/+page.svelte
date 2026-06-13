@@ -63,7 +63,8 @@
       list = list.filter((n) => !n.archived);
     }
 
-    if (searchQuery.trim()) {
+    // Локальный фильтр только для 1 символа (< 2 не вызывает API)
+    if (searchQuery.trim().length === 1) {
       const q = searchQuery.toLowerCase();
       list = list.filter(
         (n) =>
@@ -97,6 +98,13 @@
       else void notesStore.refresh();
     }, 350);
   }
+
+  $effect(() => {
+    if (notesStore.activeNoteId && !displayList.some(n => n.id === notesStore.activeNoteId)) {
+      notesStore.activeNoteId = null;
+      notesStore.activeNote = null;
+    }
+  });
 
   async function handleFilterChange(f: { type: string; id?: string }) {
     activeFilter = f;

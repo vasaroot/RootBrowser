@@ -310,10 +310,9 @@
   .editor-header {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
     gap: 0.5rem;
-    min-height: 40px;
-    padding: 0.25rem 1rem;
+    height: 40px;
+    padding: 0 1rem;
     flex-shrink: 0;
     border-bottom: 1px solid var(--border);
   }
@@ -352,6 +351,7 @@
     align-items: center;
     gap: 0.4rem;
     flex-shrink: 0;
+    margin-left: auto;
   }
 
   .updated-at {

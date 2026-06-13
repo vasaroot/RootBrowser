@@ -95,8 +95,8 @@
       list = list.filter((n) => !n.archived);
     }
 
-    // Search filter
-    if (searchQuery.trim()) {
+    // Локальный фильтр только для 1 символа (< 2 не вызывает API)
+    if (searchQuery.trim().length === 1) {
       const q = searchQuery.toLowerCase();
       list = list.filter(
         (n) =>

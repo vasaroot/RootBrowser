@@ -484,7 +484,7 @@ const translations = {
 
     // Terminal page
     terminal_title: 'SSH Connections',
-    terminal_add: 'Add Connection',
+    terminal_add: 'Add',
     terminal_search_placeholder: 'Search by name or host…',
     terminal_filter_all_auth: 'All auth types',
     terminal_count: '{n} connections',
@@ -1012,7 +1012,7 @@ const translations = {
 
     // Terminal page
     terminal_title: 'SSH-подключения',
-    terminal_add: 'Добавить подключение',
+    terminal_add: 'Добавить',
     terminal_search_placeholder: 'Поиск по имени или хосту…',
     terminal_filter_all_auth: 'Все типы авторизации',
     terminal_count: '{n} подключений',

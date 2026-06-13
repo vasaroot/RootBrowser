@@ -117,22 +117,24 @@
 
 <svelte:window onclick={onOutsideClick} />
 
-<div class="tags-wrap" bind:this={wrapEl}>
-  {#each contextChips as chip}
-    <span class="chip chip-context" style="border-color:{chip.color}22;color:{chip.color};background:{chip.color}18">
-      {chip.label}
-      {#if chip.onremove}
-        <button class="chip-x" onclick={chip.onremove}>×</button>
-      {/if}
-    </span>
-  {/each}
+<div class="tags-outer" bind:this={wrapEl}>
+  <div class="tags-wrap">
+    {#each contextChips as chip}
+      <span class="chip chip-context" style="border-color:{chip.color}22;color:{chip.color};background:{chip.color}18">
+        {chip.label}
+        {#if chip.onremove}
+          <button class="chip-x" onclick={chip.onremove}>×</button>
+        {/if}
+      </span>
+    {/each}
 
-  {#each selectedTags as tag (tag.id)}
-    <span class="chip" style="border-color:{tag.color};color:{tag.color};background:{tag.color}18">
-      {tag.name}
-      <button class="chip-x" onclick={() => removeTag(tag.name)}>×</button>
-    </span>
-  {/each}
+    {#each selectedTags as tag (tag.id)}
+      <span class="chip" style="border-color:{tag.color};color:{tag.color};background:{tag.color}18">
+        {tag.name}
+        <button class="chip-x" onclick={() => removeTag(tag.name)}>×</button>
+      </span>
+    {/each}
+  </div>
 
   <div class="add-wrap">
     <button class="add-btn" onclick={openPopup} title={$t('notes_tags_add')}>
@@ -204,7 +206,7 @@
             </label>
           </div>
           <button class="create-btn" onclick={() => addTag(inputValue, selectedColor)}>
-            {$t('notes_tags_create', { name: inputValue.trim() })}
+            Добавить тег
           </button>
         {/if}
       </div>
@@ -213,14 +215,25 @@
 </div>
 
 <style>
-  .tags-wrap {
+  .tags-outer {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
     gap: 0.3rem;
     flex: 1;
     min-width: 0;
   }
+
+  .tags-wrap {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 0.3rem;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tags-wrap::-webkit-scrollbar { display: none; }
 
   .chip {
     display: inline-flex;
@@ -278,7 +291,7 @@
     position: absolute;
     top: calc(100% + 6px);
     left: 0;
-    min-width: 200px;
+    min-width: 240px;
     background: var(--bg-2);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);

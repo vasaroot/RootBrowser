@@ -332,9 +332,8 @@ class NotesStore {
     const note = this.list.find((n) => n.id === id);
     if (!note) return;
     const updated = await api.notes.update(id, { pinned: !note.pinned });
-    const idx = this.list.findIndex((n) => n.id === id);
-    if (idx >= 0) this.list[idx] = updated as unknown as NoteListItem;
     if (this.activeNoteId === id) this.activeNote = updated;
+    await this.refresh();
   }
 
   async setTags(id: string, tagNames: string[]) {

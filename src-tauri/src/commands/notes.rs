@@ -1194,7 +1194,7 @@ pub async fn note_search(
     let fts_query = format!("{}*", query.trim());
 
     let matched_ids: Vec<(String,)> =
-        sqlx::query_as("SELECT note_id FROM notes_fts WHERE notes_fts MATCH ?")
+        sqlx::query_as("SELECT note_id FROM notes_fts WHERE notes_fts MATCH ? ORDER BY rank LIMIT 100")
             .bind(&fts_query)
             .fetch_all(&state.db)
             .await
